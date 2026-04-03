@@ -14,7 +14,8 @@ El archivo de referencia que define el formato exacto es:
 - **React 18** (app de una sola página, 6 pasos tipo wizard)
 - **Vite** para desarrollo y build
 - **Tailwind CSS 3** para estilos
-- **docx** (npm, v9+) para generar el .docx en el navegador
+- **docx** (npm, v9+) para generar el body del .docx en el navegador
+- **jszip** para post-procesar el .docx con el template de DEACERO
 - **file-saver** para la descarga
 - **lucide-react** para íconos
 - **Sin backend** — todo corre 100% en el navegador del usuario
@@ -63,14 +64,14 @@ smp-reportes/
 ├── index.html
 ├── public/
 │   ├── favicon.svg
-│   └── logo-deacero.png   ← Logo DEACERO extraído del TEMPLATE.docx
+│   └── TEMPLATE-DEACERO.docx  ← Template base con headers/footers de DEACERO
 ├── src/
 │   ├── main.jsx           ← Entry point
 │   ├── App.jsx            ← Componente único con toda la app
 │   └── index.css          ← Tailwind + estilos base
-├── referencia/
-│   └── REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx
-└── TEMPLATE.docx              ← Plantilla con header/footer de DEACERO
+└── referencia/
+    ├── REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx
+    └── TEMPLATE-DEACERO.docx  ← Plantilla origen del header/footer
 ```
 
 ### Nota sobre la arquitectura
@@ -159,22 +160,19 @@ Estas medidas vienen del análisis del archivo de referencia original.
 | Footer            | 708         |                  |
 | **Ancho contenido** | **8,838** | **~6.14"**       |
 
-### Header (TODAS las páginas) — FIJO excepto código de operación
+### Header y Footer — DIRECTAMENTE del TEMPLATE
 
-El cliente siempre es **DEACERO**. El header y footer están hardcodeados.
+El cliente siempre es **DEACERO**. Header y footer vienen directamente del archivo `referencia/TEMPLATE-DEACERO.docx` (copiado a `public/`), lo que garantiza que son **pixel-perfect** con el documento de referencia.
 
-Elementos en orden:
-1. **Barra naranja**: imagen PNG de 349×13px, color `#FF6600` (rgb 255,102,0), estirada al ancho ~286pt
-2. **Título**: "REPORTE DE OPERACIÓN  PUERTOS MEXICO / USA" — bold, 14pt (size 28 half-points)
-3. **Logo DEACERO**: alineado a la derecha, ~120×36pt (cargado desde `public/logo-deacero.png`, extraído del TEMPLATE.docx)
-4. **Código de operación** (LO ÚNICO QUE CAMBIA): "{PUERTO}-LP-{CONSECUTIVO}-{AÑO}  MV {BUQUE}   {VIAJE} VCZ" — Arial bold, 12pt (size 24)
+**Lo ÚNICO que cambia** en el header es el texto placeholder `-----` que se reemplaza por:
+`{PUERTO}-LP-{CONSECUTIVO}-{AÑO}  MV {BUQUE}   {VIAJE} VCZ`
 
-### Footer (TODAS las páginas) — FIJO
-
-3 líneas centradas (datos hardcodeados de DEACERO):
-1. "DEACERO SAPI DE CV DEA7103086X2"
-2. "Av. Lázaro Cárdenas 2333, Col. Valle Oriente, San Pedro Garza Garcia, Nuevo Leon. CP 66269"
-3. "Tel. 01 800 021 33 22"
+**Mecanismo**: Después de generar el body con la librería `docx`, se usa JSZip para:
+1. Abrir el blob generado y el template
+2. Copiar los 6 archivos de header/footer del template al documento generado
+3. Reemplazar `-----` con el código de operación real
+4. Copiar las imágenes del header (barra naranja + logo DEACERO)
+5. Actualizar las relaciones XML (.rels) y Content_Types
 
 ### Página 1 — Portada
 
@@ -210,7 +208,7 @@ Después de la tabla:
 ### Páginas 4-34+ — Fotos de Bodegas
 
 Cada grupo de bodega empieza con:
-- Título centrado: "BODEGA No XX" — Arial bold 14pt
+- Título centrado: "BODEGA No XX" — Calibri bold 14pt
 
 Cada página tiene:
 - 2 fotos apiladas verticalmente, centradas
@@ -236,7 +234,7 @@ Secciones adicionales después de las bodegas:
 
 ## Reglas de generación del .docx
 
-1. Usar librería `docx` de npm (no manipulación XML directa)
+1. Usar librería `docx` de npm para generar el body, y `jszip` para post-procesar con el template
 2. Importar: `Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun, Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, PageBreak, VerticalAlign`
 3. Tablas: siempre usar `WidthType.DXA`, nunca `WidthType.PERCENTAGE`
 4. Tablas: poner AMBOS `columnWidths` en la tabla Y `width` en cada celda
@@ -244,7 +242,7 @@ Secciones adicionales después de las bodegas:
 6. Imágenes: siempre especificar `type: 'jpg'` o `type: 'png'`
 7. Saltos de página: `new Paragraph({ children: [new PageBreak()] })`
 8. Nunca usar `\n` — usar `Paragraph` separados
-9. Font del documento: Arial para todo el contenido del doc
+9. Font del documento: Calibri para todo el contenido del doc
 10. Fotos de bodega: ordenar por bodega (1, 2, 3...) manteniendo el orden del usuario dentro de cada bodega
 11. `Packer.toBlob()` para generar y descargar con file-saver o link temporal
 

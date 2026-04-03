@@ -584,18 +584,12 @@ const CLIENTE = {
   telefono: '01 800 021 33 22',
 }
 
-// Función para cargar el logo DEACERO desde public/
-const cargarLogoDeacero = async () => {
-  const resp = await fetch('/logo-deacero.png')
-  const buf = await resp.arrayBuffer()
-  return new Uint8Array(buf)
-}
-
 async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, sof }) {
   const {
     Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun,
     Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, PageBreak, VerticalAlign,
   } = await import('docx')
+  const JSZip = (await import('jszip')).default
 
   // ─── Utilidades internas ───
   const borde = { style: BorderStyle.SINGLE, size: 1, color: '000000' }
@@ -609,32 +603,9 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
     margins: { top: 40, bottom: 40, left: 80, right: 80 },
     children: [new Paragraph({
       alignment: opts.alineacion || AlignmentType.LEFT,
-      children: [new TextRun({ text: texto || '', bold: opts.negrita, size: opts.tamano || 20, font: 'Arial', color: opts.color || '000000' })],
+      children: [new TextRun({ text: texto || '', bold: opts.negrita, size: opts.tamano || 20, font: 'Calibri', color: opts.color || '000000' })],
     })],
   })
-
-  // ─── Barra naranja ───
-  const canvas = document.createElement('canvas'); canvas.width = 349; canvas.height = 13
-  const ctx = canvas.getContext('2d'); ctx.fillStyle = '#FF6600'; ctx.fillRect(0, 0, 349, 13)
-  const barraUrl = canvas.toDataURL('image/png')
-  const barraBin = atob(barraUrl.split(',')[1])
-  const barraDatos = new Uint8Array(barraBin.length); for (let i = 0; i < barraBin.length; i++) barraDatos[i] = barraBin.charCodeAt(i)
-
-  // ─── Logo DEACERO ───
-  const logoDatos = await cargarLogoDeacero()
-
-  const codigoHeader = `${config.puerto}-LP-${config.consecutivo}-${config.anio}  MV ${config.buque}   ${config.viaje} VCZ`
-
-  // ─── Header (fijo salvo código de operación) ───
-  const hijosHeader = [
-    new Paragraph({ children: [new ImageRun({ type: 'png', data: barraDatos, transformation: { width: 286, height: 14 }, altText: { title: 'Barra', description: 'Barra naranja', name: 'barra' } })] }),
-    new Paragraph({ spacing: { after: 0, line: 240 }, children: [new TextRun({ text: 'REPORTE DE OPERACIÓN  PUERTOS MEXICO / USA', bold: true, size: 28, color: '000000' })] }),
-    new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0 }, children: [new ImageRun({ type: 'png', data: logoDatos, transformation: { width: 120, height: 36 }, altText: { title: 'Logo', description: 'Logo DEACERO', name: 'logo' } })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 240 }, children: [new TextRun({ text: codigoHeader, bold: true, size: 24, font: 'Arial', color: '000000' })] }),
-  ]
-
-  // ─── Footer ───
-  const parrafoFooter = (texto) => new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 240 }, children: [new TextRun({ text: texto, color: '000000', size: 20 })] })
 
   const seccion = {
     page: { size: { width: DOC.anchoHoja, height: DOC.altoHoja }, margin: { top: DOC.margenTop, right: DOC.margenRight, bottom: DOC.margenBottom, left: DOC.margenLeft, header: DOC.header, footer: DOC.footer, gutter: 0 } },
@@ -654,7 +625,6 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
   portada.push(new Paragraph({ children: [new PageBreak()] }))
 
   // ═══ PÁGINA 2: OPERACIÓN ═══
-  // Tabla de eventos (2 columnas como el original)
   const filasEventos = operacion.eventos.map((ev) =>
     new TableRow({ children: [
       celda(ev.nombre, { ancho: TABLA_EVENTOS.cols[0], negrita: true }),
@@ -667,11 +637,8 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
   ] }))
 
   const tablaEventos = new Table({ width: { size: TABLA_EVENTOS.total, type: WidthType.DXA }, columnWidths: TABLA_EVENTOS.cols, rows: filasEventos })
+  const tituloSeccion = (texto) => new Paragraph({ spacing: { before: 200, after: 100 }, children: [new TextRun({ text: texto, bold: true, size: 24, font: 'Calibri' })] })
 
-  // Subtítulo cantidades
-  const tituloSeccion = (texto) => new Paragraph({ spacing: { before: 200, after: 100 }, children: [new TextRun({ text: texto, bold: true, size: 24, font: 'Arial' })] })
-
-  // Tabla cantidades
   const filasCant = [
     new TableRow({ children: [celda('DESCRIPCION DEL PRODUCTO', { ancho: TABLA_CANTIDADES.cols[0], negrita: true }), celda('TIPO', { ancho: TABLA_CANTIDADES.cols[1], negrita: true }), celda('PIEZA', { ancho: TABLA_CANTIDADES.cols[2], negrita: true }), celda('TONELAJE (MT)', { ancho: TABLA_CANTIDADES.cols[3], negrita: true })] }),
     ...operacion.cantidades.map((c) => new TableRow({ children: [celda(c.descripcion, { ancho: TABLA_CANTIDADES.cols[0] }), celda(c.tipo, { ancho: TABLA_CANTIDADES.cols[1] }), celda(c.piezas, { ancho: TABLA_CANTIDADES.cols[2], alineacion: AlignmentType.CENTER }), celda(c.tonelaje, { ancho: TABLA_CANTIDADES.cols[3], alineacion: AlignmentType.RIGHT })] })),
@@ -679,7 +646,6 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
   ]
   const tablaCant = new Table({ width: { size: TABLA_CANTIDADES.total, type: WidthType.DXA }, columnWidths: TABLA_CANTIDADES.cols, rows: filasCant })
 
-  // Tabla BL
   const filasBL = [
     new TableRow({ children: [celda('NUMERO DE BL', { ancho: TABLA_BL.cols[0], negrita: true }), celda('PUERTO', { ancho: TABLA_BL.cols[1], negrita: true }), celda('PIEZAS', { ancho: TABLA_BL.cols[2], negrita: true }), celda('TONELAJE (MT)', { ancho: TABLA_BL.cols[3], negrita: true })] }),
     ...operacion.bls.map((bl) => new TableRow({ children: [celda(bl.numero, { ancho: TABLA_BL.cols[0] }), celda(bl.puerto, { ancho: TABLA_BL.cols[1] }), celda(bl.piezas, { ancho: TABLA_BL.cols[2], alineacion: AlignmentType.CENTER }), celda(bl.tonelaje, { ancho: TABLA_BL.cols[3], alineacion: AlignmentType.RIGHT })] })),
@@ -690,7 +656,7 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
   const pag2 = [
     tablaEventos,
     tituloSeccion('CANTIDADES RECIBIDAS'),
-    new Paragraph({ children: [new TextRun({ text: CLIENTE.nombre, bold: true, size: 20, font: 'Arial' })] }),
+    new Paragraph({ children: [new TextRun({ text: CLIENTE.nombre, bold: true, size: 20, font: 'Calibri' })] }),
     tablaCant,
     tituloSeccion('GRAN TOTAL'),
     tablaBL,
@@ -706,20 +672,19 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
   const tablaStow = new Table({ width: { size: TABLA_STOWAGE.total, type: WidthType.DXA }, columnWidths: TABLA_STOWAGE.cols, rows: filasStow })
 
   const obsParrs = stowage.observaciones
-    ? stowage.observaciones.split(/\n+/).map((l) => new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: l, size: 18, font: 'Arial' })] }))
+    ? stowage.observaciones.split(/\n+/).map((l) => new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: l, size: 18, font: 'Calibri' })] }))
     : [new Paragraph({ children: [] })]
 
   const pag3 = [
     tituloSeccion('STOWAGE PLAN'),
     tablaStow,
-    new Paragraph({ spacing: { before: 300 }, children: [new TextRun({ text: 'OBSERVACIONES:', bold: true, size: 24, font: 'Arial' })] }),
+    new Paragraph({ spacing: { before: 300 }, children: [new TextRun({ text: 'OBSERVACIONES:', bold: true, size: 24, font: 'Calibri' })] }),
     ...obsParrs,
     new Paragraph({ children: [new PageBreak()] }),
   ]
 
   // ═══ PÁGINAS 4+: FOTOS ═══
   const pagsFotos = []
-  // Ordenar por categoría manteniendo orden del usuario
   const ordenCats = [...new Set(fotos.map((f) => f.categoriaKey))]
   const fotosOrdenadas = []
   for (const clave of ordenCats) {
@@ -731,7 +696,6 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
     const f1 = fotosOrdenadas[i], f2 = fotosOrdenadas[i + 1]
     const pagina = []
 
-    // Título de sección si cambió
     if (f1.categoriaKey !== catActual) {
       catActual = f1.categoriaKey
       const etiqueta = catActual.startsWith('bodega-')
@@ -739,18 +703,16 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
         : catActual.replace('seccion-', '')
       pagina.push(new Paragraph({
         alignment: AlignmentType.CENTER, spacing: { before: 100, after: 100 },
-        children: [new TextRun({ text: etiqueta, bold: true, size: 28, font: 'Arial' })],
+        children: [new TextRun({ text: etiqueta, bold: true, size: 28, font: 'Calibri' })],
       }))
     }
 
-    // Foto 1
     const dims1 = await obtenerDimensiones(f1.archivo)
     const alto1Pt = Math.round((dims1.alto / dims1.ancho) * 442)
     pagina.push(
       new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f1.archivo), transformation: { width: 442, height: Math.min(alto1Pt, 270) }, altText: { title: 'Foto', description: 'Operación', name: `foto${i}` } })] }),
     )
 
-    // Foto 2
     if (f2) {
       if (f2.categoriaKey !== catActual) {
         catActual = f2.categoriaKey
@@ -759,7 +721,7 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
           : catActual.replace('seccion-', '')
         pagina.push(new Paragraph({
           alignment: AlignmentType.CENTER, spacing: { before: 100, after: 50 },
-          children: [new TextRun({ text: etiqueta2, bold: true, size: 28, font: 'Arial' })],
+          children: [new TextRun({ text: etiqueta2, bold: true, size: 28, font: 'Calibri' })],
         }))
       }
       const dims2 = await obtenerDimensiones(f2.archivo)
@@ -776,41 +738,129 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
   const pagsSOF = []
   if (sof.entradas.some((e) => e.fecha)) {
     pagsSOF.push(
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new TextRun({ text: 'STATEMENTS OF FACTS', bold: true, size: 28, font: 'Arial' })] }),
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 300 }, children: [new TextRun({ text: `M.V ${config.buque} ${config.viaje}`, bold: true, size: 24, font: 'Arial' })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new TextRun({ text: 'STATEMENTS OF FACTS', bold: true, size: 28, font: 'Calibri' })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 300 }, children: [new TextRun({ text: `M.V ${config.buque} ${config.viaje}`, bold: true, size: 24, font: 'Calibri' })] }),
     )
     for (const ent of sof.entradas) {
       if (!ent.fecha) continue
       pagsSOF.push(
-        new Paragraph({ spacing: { before: 200, after: 0 }, children: [new TextRun({ text: ent.fecha, bold: true, size: 22, font: 'Arial' })] }),
-        new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: ent.diaSemana, bold: true, size: 20, font: 'Arial' })] }),
+        new Paragraph({ spacing: { before: 200, after: 0 }, children: [new TextRun({ text: ent.fecha, bold: true, size: 22, font: 'Calibri' })] }),
+        new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: ent.diaSemana, bold: true, size: 20, font: 'Calibri' })] }),
       )
       for (const lin of ent.lineas) {
         if (!lin.actividad) continue
-        pagsSOF.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: `${lin.horaInicio}-${lin.horaFin} ${lin.actividad}`, size: 20, font: 'Arial' })] }))
+        pagsSOF.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: `${lin.horaInicio}-${lin.horaFin} ${lin.actividad}`, size: 20, font: 'Calibri' })] }))
       }
     }
   }
 
-  // ═══ CONSTRUIR DOCUMENTO ═══
+  // ═══ PASO 1: Generar documento con docx library (header/footer temporal) ═══
+  const dummyP = new Paragraph({ children: [] })
   const doc = new Document({
-    styles: { default: { document: { run: { font: 'Arial', size: 22 } } } },
+    styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
     sections: [{
       properties: seccion,
-      headers: { default: new Header({ children: hijosHeader }) },
-      footers: { default: new Footer({ children: [
-        parrafoFooter(`${CLIENTE.nombre} ${CLIENTE.rfc}`),
-        parrafoFooter(CLIENTE.direccion),
-        parrafoFooter(`Tel. ${CLIENTE.telefono}`),
-      ] }) },
+      headers: { default: new Header({ children: [dummyP] }) },
+      footers: { default: new Footer({ children: [dummyP] }) },
       children: [...portada, ...pag2, ...pag3, ...pagsFotos, ...pagsSOF, new Paragraph({ children: [] })],
     }],
   })
 
-  const blob = await Packer.toBlob(doc)
+  const blobInicial = await Packer.toBlob(doc)
+
+  // ═══ PASO 2: Post-procesar con el template para header/footer exactos ═══
+  const zipGen = await JSZip.loadAsync(blobInicial)
+  const templateBytes = await (await fetch('/TEMPLATE-DEACERO.docx')).arrayBuffer()
+  const zipTpl = await JSZip.loadAsync(templateBytes)
+
+  const codigoHeader = `${config.puerto}-LP-${config.consecutivo}-${config.anio}  MV ${config.buque}   ${config.viaje} VCZ`
+
+  // Eliminar headers/footers generados por docx library
+  for (const path of Object.keys(zipGen.files)) {
+    if (path.match(/^word\/(header|footer)\d+\.xml$/) || path.match(/^word\/_rels\/(header|footer)\d+\.xml\.rels$/)) {
+      zipGen.remove(path)
+    }
+  }
+
+  // Copiar headers/footers del template (pixel-perfect)
+  const archivosTemplate = [
+    'word/header1.xml', 'word/header2.xml', 'word/header3.xml',
+    'word/footer1.xml', 'word/footer2.xml', 'word/footer3.xml',
+    'word/_rels/header2.xml.rels',
+  ]
+  for (const f of archivosTemplate) {
+    const contenido = await zipTpl.file(f)?.async('uint8array')
+    if (contenido) zipGen.file(f, contenido)
+  }
+
+  // Reemplazar ----- con el código de operación real
+  let hdr2 = await zipGen.file('word/header2.xml').async('string')
+  hdr2 = hdr2.replace('>-----<', `>${codigoHeader}<`)
+  zipGen.file('word/header2.xml', hdr2)
+
+  // Copiar imágenes del header del template (barra naranja + logo DEACERO)
+  // Renombrar para evitar conflicto con imágenes del body
+  const imgBarra = await zipTpl.file('word/media/image1.png')?.async('uint8array')
+  const imgLogo = await zipTpl.file('word/media/image2.png')?.async('uint8array')
+  zipGen.file('word/media/hdr_barra.png', imgBarra)
+  zipGen.file('word/media/hdr_logo.png', imgLogo)
+
+  // Actualizar header2.xml.rels para apuntar a los nombres renombrados
+  let hdr2Rels = await zipGen.file('word/_rels/header2.xml.rels').async('string')
+  hdr2Rels = hdr2Rels.replace(/media\/image1\.png/g, 'media/hdr_barra.png')
+  hdr2Rels = hdr2Rels.replace(/media\/image2\.png/g, 'media/hdr_logo.png')
+  zipGen.file('word/_rels/header2.xml.rels', hdr2Rels)
+
+  // Actualizar document.xml.rels: quitar refs de header/footer viejos, agregar los del template
+  let docRels = await zipGen.file('word/_rels/document.xml.rels').async('string')
+  docRels = docRels.replace(/<Relationship[^>]*Type="[^"]*\/(header|footer)"[^>]*\/>/g, '')
+  const nuevasRels =
+    '<Relationship Id="rId901" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' +
+    '<Relationship Id="rId902" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>' +
+    '<Relationship Id="rId903" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>' +
+    '<Relationship Id="rId904" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>' +
+    '<Relationship Id="rId905" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header3.xml"/>' +
+    '<Relationship Id="rId906" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer3.xml"/>'
+  docRels = docRels.replace('</Relationships>', nuevasRels + '</Relationships>')
+  zipGen.file('word/_rels/document.xml.rels', docRels)
+
+  // Actualizar sectPr en document.xml: quitar refs viejas, agregar del template
+  let docXml = await zipGen.file('word/document.xml').async('string')
+  docXml = docXml.replace(/<w:headerReference[^>]*\/>/g, '')
+  docXml = docXml.replace(/<w:footerReference[^>]*\/>/g, '')
+  const nuevasRefsSect =
+    '<w:headerReference w:type="even" r:id="rId901"/>' +
+    '<w:headerReference w:type="default" r:id="rId902"/>' +
+    '<w:footerReference w:type="even" r:id="rId903"/>' +
+    '<w:footerReference w:type="default" r:id="rId904"/>' +
+    '<w:headerReference w:type="first" r:id="rId905"/>' +
+    '<w:footerReference w:type="first" r:id="rId906"/>'
+  docXml = docXml.replace(/<w:sectPr([^>]*)>/, `<w:sectPr$1>${nuevasRefsSect}`)
+  zipGen.file('word/document.xml', docXml)
+
+  // Actualizar [Content_Types].xml para incluir todos los headers/footers
+  let contentTypes = await zipGen.file('[Content_Types].xml').async('string')
+  const partes = [
+    ['/word/header1.xml', 'header'], ['/word/header2.xml', 'header'], ['/word/header3.xml', 'header'],
+    ['/word/footer1.xml', 'footer'], ['/word/footer2.xml', 'footer'], ['/word/footer3.xml', 'footer'],
+  ]
+  for (const [partName, tipo] of partes) {
+    const ct = `application/vnd.openxmlformats-officedocument.wordprocessingml.${tipo}+xml`
+    if (!contentTypes.includes(partName)) {
+      contentTypes = contentTypes.replace('</Types>', `<Override PartName="${partName}" ContentType="${ct}"/></Types>`)
+    }
+  }
+  zipGen.file('[Content_Types].xml', contentTypes)
+
+  // ═══ Generar blob final y descargar ═══
+  const blobFinal = await zipGen.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  })
+
   const nombre = `REPORTE_${config.puerto}_${config.consecutivo}-${config.anio}_MV_${(config.buque || 'BUQUE').replace(/\s+/g, '_')}__${config.viaje}_${config.puerto}_IMP.docx`
   const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
+  link.href = URL.createObjectURL(blobFinal)
   link.download = nombre
   link.click()
   URL.revokeObjectURL(link.href)
