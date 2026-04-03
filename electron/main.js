@@ -8,7 +8,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: 'SMP Reportes',
-    icon: path.join(__dirname, '../public/favicon.svg'),
+    icon: path.join(__dirname, '../public/icon.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

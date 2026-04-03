@@ -49,12 +49,10 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "public/favicon.svg"
+      "icon": "public/icon.png"
     },
     "nsis": {
       "oneClick": true,
-      "installerIcon": "public/favicon.svg",
-      "uninstallerIcon": "public/favicon.svg",
       "allowToChangeInstallationDirectory": false
     },
     "mac": {
