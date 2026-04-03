@@ -121,6 +121,37 @@ const actualizarProfundo = (obj, ruta, valor) => {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// VALIDACIÓN POR PASO
+// ═══════════════════════════════════════════════════════════════════
+
+const validarPaso = (indicePaso, { config, operacion, stowage, fotos, fotosPortada }) => {
+  const faltantes = []
+  switch (indicePaso) {
+    case 0: // Config
+      if (!config.buque.trim()) faltantes.push('Nombre del buque')
+      break
+    case 1: { // Operación
+      const tieneEvento = operacion.eventos.some((e) => e.mes && e.dia && e.hora)
+      if (!tieneEvento) faltantes.push('Al menos 1 evento con fecha')
+      if (!operacion.cargaTotal || parsearTonelaje(operacion.cargaTotal) === 0) faltantes.push('Carga total')
+      break
+    }
+    case 2: { // Stowage
+      const tieneBodega = stowage.bodegas.some((b) => b.producto.trim() && parsearTonelaje(b.tonelaje) > 0)
+      if (!tieneBodega) faltantes.push('Al menos 1 bodega con producto y tonelaje')
+      break
+    }
+    case 3: // Fotos
+      if (fotosPortada.length < 2) faltantes.push(`Fotos de portada (${fotosPortada.length}/2)`)
+      if (fotos.length < 1) faltantes.push('Al menos 1 foto de bodega')
+      break
+    default:
+      break
+  }
+  return { completo: faltantes.length === 0, faltantes }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // VALORES INICIALES
 // ═══════════════════════════════════════════════════════════════════
 
@@ -513,7 +544,22 @@ function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas 
 
 function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, generando, onGenerar }) {
   const nombre = `REPORTE_${config.puerto}_${config.consecutivo}-${config.anio}_MV_${(config.buque || 'BUQUE').replace(/\s+/g, '_')}__${config.viaje}_${config.puerto}_IMP.docx`
-  const pags = 3 + Math.ceil(fotos.length / 2) + 1
+  const pags = (() => {
+    let p = 3 // portada + operación + stowage
+    const fpc = {}
+    for (const f of fotos) { if (!fpc[f.categoriaKey]) fpc[f.categoriaKey] = []; fpc[f.categoriaKey].push(f) }
+    const bodegas = stowage.bodegas.map((_, i) => `bodega-${i + 1}`)
+    const secciones = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
+    for (const cat of [...bodegas, ...secciones]) {
+      const g = fpc[cat] || []
+      const bi = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
+      const esEmpty = bi >= 0 && stowage.bodegas[bi] && stowage.bodegas[bi].producto.toUpperCase().trim() === 'EMPTY' && g.length === 0
+      if (esEmpty) { p += 1; continue }
+      if (g.length === 0) continue
+      p += cat === 'seccion-DOCUMENTOS' ? g.length : Math.ceil(g.length / 2)
+    }
+    return p
+  })()
   const Chk = ({ ok, t }) => (
     <div className="flex items-center gap-2"><div className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${ok ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'}`}>{ok ? '✓' : '—'}</div><span className={ok ? 'text-navy' : 'text-gray-400'}>{t}</span></div>
   )
@@ -552,23 +598,197 @@ function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, generand
           {generando ? 'Generando documento...' : 'Generar Reporte .docx'}
         </Boton>
       </Tarjeta>
-      {fotos.length > 0 && (
-        <Tarjeta titulo="Preview de Fotos" subtitulo="Distribución de páginas" icono={<Camera size={22} />}>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2">
-            {Array.from({ length: Math.ceil(fotos.length / 2) }).map((_, pi) => {
-              const f1 = fotos[pi * 2], f2 = fotos[pi * 2 + 1]
-              return (
-                <div key={pi} className="border border-gray-200 rounded-lg p-1.5 bg-white" style={{ aspectRatio: '8.5/11' }}>
-                  <div className="h-1.5 bg-barra rounded-sm mb-1" />
-                  <div className="text-[5px] text-gray-400 text-center mb-0.5">Pág. {pi + 4}</div>
-                  {f1 && <div className="relative mb-1"><img src={f1.dataUrl} className="w-full h-10 object-cover rounded-sm" /><span className="absolute bottom-0 left-0.5 text-[5px] text-accent font-bold bg-white/80 px-0.5 rounded-sm">{f1.categoriaKey.replace('bodega-', 'B').replace('seccion-', '')}</span></div>}
-                  {f2 && <div className="relative"><img src={f2.dataUrl} className="w-full h-10 object-cover rounded-sm" /><span className="absolute bottom-0 left-0.5 text-[5px] text-accent font-bold bg-white/80 px-0.5 rounded-sm">{f2.categoriaKey.replace('bodega-', 'B').replace('seccion-', '')}</span></div>}
-                </div>
-              )
-            })}
-          </div>
-        </Tarjeta>
-      )}
+      <Tarjeta titulo="Preview del Documento" subtitulo={`${pags} páginas estimadas`} icono={<Camera size={22} />}>
+        {(() => {
+          // Construir páginas que replican la estructura real del .docx
+          const paginas = []
+
+          // Pág 1: Portada
+          paginas.push({ tipo: 'portada', fotos: fotosPortada })
+          // Pág 2: Datos de Operación
+          paginas.push({ tipo: 'datos' })
+          // Pág 3: Stowage + Observaciones
+          paginas.push({ tipo: 'stowage' })
+
+          // Páginas de fotos: agrupar por categoría igual que generarDocx
+          const bodegasDelStowage = stowage.bodegas.map((_, idx) => `bodega-${idx + 1}`)
+          const seccionesOrdenadas = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
+          const todasCats = [...bodegasDelStowage, ...seccionesOrdenadas]
+
+          const fotosPorCat = {}
+          for (const f of fotos) {
+            if (!fotosPorCat[f.categoriaKey]) fotosPorCat[f.categoriaKey] = []
+            fotosPorCat[f.categoriaKey].push(f)
+          }
+
+          for (const cat of todasCats) {
+            const fotosGrupo = fotosPorCat[cat] || []
+            const bodegaIdx = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
+            const esEmpty = bodegaIdx >= 0 && stowage.bodegas[bodegaIdx] && stowage.bodegas[bodegaIdx].producto.toUpperCase().trim() === 'EMPTY' && fotosGrupo.length === 0
+            const titulo = cat.startsWith('bodega-')
+              ? `BODEGA No ${cat.replace('bodega-', '').padStart(2, '0')}`
+              : cat.replace('seccion-', '')
+            const esDoc = cat === 'seccion-DOCUMENTOS'
+
+            if (esEmpty) {
+              paginas.push({ tipo: 'empty', titulo })
+              continue
+            }
+            if (fotosGrupo.length === 0) continue
+
+            let i = 0
+            let primera = true
+            while (i < fotosGrupo.length) {
+              if (esDoc) {
+                paginas.push({ tipo: 'foto-doc', titulo: primera ? titulo : null, foto: fotosGrupo[i] })
+                i += 1
+              } else {
+                paginas.push({ tipo: 'foto-par', titulo: primera ? titulo : null, f1: fotosGrupo[i], f2: fotosGrupo[i + 1] || null })
+                i += 2
+              }
+              primera = false
+            }
+          }
+
+          // Miniatura de página base
+          const MiniPag = ({ num, children, destacar }) => (
+            <div className={`border rounded-xl p-2 bg-white flex flex-col shadow-sm ${destacar ? 'border-accent/40 ring-1 ring-accent/20' : 'border-gray-200'}`} style={{ aspectRatio: '8.5/11' }}>
+              <div className="h-1.5 bg-barra rounded-sm mb-1 shrink-0" />
+              <div className="text-[7px] text-gray-400 text-center mb-1 shrink-0 font-lexend">Pág. {num}</div>
+              <div className="flex-1 flex flex-col justify-center min-h-0 overflow-hidden">{children}</div>
+            </div>
+          )
+
+          // Agrupar páginas por sección para separadores visuales
+          let seccionActual = null
+          const elementos = []
+
+          paginas.forEach((p, idx) => {
+            const num = idx + 1
+            // Determinar sección
+            let seccion = null
+            if (p.tipo === 'portada' || p.tipo === 'datos' || p.tipo === 'stowage') seccion = 'info'
+            else if (p.titulo) seccion = p.titulo
+            else seccion = seccionActual
+
+            if (seccion !== seccionActual && seccion !== 'info') {
+              seccionActual = seccion
+              if (seccion) elementos.push({ tipo: 'separador', texto: seccion })
+            } else {
+              seccionActual = seccion
+            }
+
+            if (p.tipo === 'portada') {
+              elementos.push({ tipo: 'pagina', contenido: (
+                <MiniPag key={idx} num={num}>
+                  <div className="text-[8px] font-bold text-navy text-center mb-1 shrink-0 font-lexend">PORTADA</div>
+                  {p.fotos.length > 0 ? (
+                    <div className="flex-1 flex flex-col gap-1 min-h-0 px-0.5">
+                      {p.fotos.map((fp, fi) => (
+                        <div key={fi} className="flex-1 min-h-0 flex items-center">
+                          <img src={fp.dataUrl || fp.archivo} className="w-full h-full object-contain rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center"><span className="text-[8px] text-gray-300">Sin fotos</span></div>
+                  )}
+                </MiniPag>
+              )})
+            } else if (p.tipo === 'datos') {
+              elementos.push({ tipo: 'pagina', contenido: (
+                <MiniPag key={idx} num={num}>
+                  <div className="text-[8px] font-bold text-navy text-center mb-2 font-lexend">OPERACIÓN</div>
+                  <div className="space-y-1 px-2">
+                    {[1,2,3].map(t => <div key={t} className="h-2.5 bg-gray-100 rounded-[2px]" />)}
+                    <div className="h-0.5 bg-yellow-400 my-1 rounded-full" />
+                    {[1,2].map(t => <div key={t} className="h-2 bg-gray-100 rounded-[2px]" />)}
+                    <div className="h-0.5 bg-orange-400 my-1 rounded-full" />
+                    {[1,2].map(t => <div key={t} className="h-2 bg-gray-100 rounded-[2px]" />)}
+                  </div>
+                </MiniPag>
+              )})
+            } else if (p.tipo === 'stowage') {
+              elementos.push({ tipo: 'pagina', contenido: (
+                <MiniPag key={idx} num={num}>
+                  <div className="text-[8px] font-bold text-navy text-center mb-2 font-lexend">STOWAGE</div>
+                  <div className="space-y-1 px-2">
+                    {stowage.bodegas.slice(0, 5).map((_, bi) => <div key={bi} className="h-2 bg-gray-100 rounded-[2px]" />)}
+                    <div className="h-2 bg-accent/10 rounded-[2px]" />
+                  </div>
+                  <div className="text-[7px] text-gray-400 text-center mt-2">Observaciones</div>
+                </MiniPag>
+              )})
+            } else if (p.tipo === 'empty') {
+              elementos.push({ tipo: 'pagina', contenido: (
+                <MiniPag key={idx} num={num} destacar>
+                  <div className="text-[8px] font-bold text-accent text-center mb-1">{p.titulo}</div>
+                  <div className="flex-1 flex items-center justify-center bg-gray-50 rounded-lg mx-1 my-0.5">
+                    <span className="text-xl font-black text-navy tracking-[0.2em]">EMPTY</span>
+                  </div>
+                </MiniPag>
+              )})
+            } else if (p.tipo === 'foto-doc') {
+              elementos.push({ tipo: 'pagina', contenido: (
+                <MiniPag key={idx} num={num}>
+                  {p.titulo && <div className="text-[7px] font-bold text-accent text-center mb-1 shrink-0">{p.titulo}</div>}
+                  <div className="flex-1 flex items-center justify-center px-1 min-h-0">
+                    <img src={p.foto.dataUrl} className="w-full h-full object-contain rounded" />
+                  </div>
+                </MiniPag>
+              )})
+            } else if (p.tipo === 'foto-par') {
+              elementos.push({ tipo: 'pagina', contenido: (
+                <MiniPag key={idx} num={num}>
+                  {p.titulo && <div className="text-[7px] font-bold text-accent text-center mb-1 shrink-0">{p.titulo}</div>}
+                  <div className="flex-1 flex flex-col gap-1 min-h-0 px-0.5">
+                    <div className="flex-1 min-h-0 flex items-center">
+                      <img src={p.f1.dataUrl} className="w-full h-full object-contain rounded" />
+                    </div>
+                    {p.f2 && <div className="flex-1 min-h-0 flex items-center">
+                      <img src={p.f2.dataUrl} className="w-full h-full object-contain rounded" />
+                    </div>}
+                  </div>
+                </MiniPag>
+              )})
+            }
+          })
+
+          return (
+            <div className="space-y-3">
+              {(() => {
+                const bloques = []
+                let bloque = []
+                for (const el of elementos) {
+                  if (el.tipo === 'separador') {
+                    if (bloque.length > 0) bloques.push({ paginas: bloque, separador: null })
+                    bloque = []
+                    bloques.push({ paginas: [], separador: el.texto })
+                  } else {
+                    bloque.push(el.contenido)
+                  }
+                }
+                if (bloque.length > 0) bloques.push({ paginas: bloque, separador: null })
+
+                return bloques.map((b, bi) => {
+                  if (b.separador) return (
+                    <div key={`sep-${bi}`} className="flex items-center gap-2 pt-2">
+                      <div className="h-px flex-1 bg-accent/20" />
+                      <span className="text-[10px] font-bold text-accent font-lexend tracking-wide">{b.separador}</span>
+                      <div className="h-px flex-1 bg-accent/20" />
+                    </div>
+                  )
+                  return (
+                    <div key={`grid-${bi}`} className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
+                      {b.paginas}
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+          )
+        })()}
+      </Tarjeta>
     </div>
   )
 }
@@ -1058,6 +1278,7 @@ export default function App() {
   const [reportes, setReportes] = useState([])
 
   const [paso, setPaso] = useState(0)
+  const [maxPasoVisitado, setMaxPasoVisitado] = useState(0)
   const [config, setConfig] = useState(configInicial())
   const [operacion, setOperacion] = useState(operacionInicial())
   const [stowage, setStowage] = useState(stowageInicial())
@@ -1067,6 +1288,11 @@ export default function App() {
   const [generadoFlag, setGeneradoFlag] = useState(false)
   const [descargandoId, setDescargandoId] = useState(null)
   const [cargando, setCargando] = useState(false)
+
+  const irAPaso = useCallback((i) => {
+    setPaso(i)
+    setMaxPasoVisitado((prev) => Math.max(prev, i))
+  }, [])
 
   const guardadoTimeout = useRef(null)
   const fotosGuardadasRef = useRef(false)
@@ -1135,6 +1361,7 @@ export default function App() {
     setFotos([])
     setFotosPortada([])
     setPaso(0)
+    setMaxPasoVisitado(0)
     setGeneradoFlag(false)
     setReporteActualId(id)
     fotosGuardadasRef.current = false
@@ -1149,7 +1376,9 @@ export default function App() {
     setConfig(datos.config || configInicial())
     setOperacion(datos.operacion || operacionInicial())
     setStowage(datos.stowage || stowageInicial())
-    setPaso(datos.pasoActual || 0)
+    const pasoGuardado = datos.pasoActual || 0
+    setPaso(pasoGuardado)
+    setMaxPasoVisitado(pasoGuardado)
     setGeneradoFlag(datos.generado || false)
 
     try {
@@ -1261,15 +1490,24 @@ export default function App() {
       {/* Navegación */}
       <div className="bg-white border-b border-gray-100 px-8 flex gap-0 overflow-x-auto">
         {PASOS.map((p, i) => {
-          const activo = paso === i, completo = paso > i
-          const Ic = p.icono
+          const activo = paso === i
+          const yaVisitado = i < maxPasoVisitado
+          const validacion = yaVisitado && !activo ? validarPaso(i, { config, operacion, stowage, fotos, fotosPortada }) : null
+          const completo = validacion?.completo
+          const incompleto = validacion && !validacion.completo
           return (
-            <button key={p.clave} onClick={() => setPaso(i)}
-              className={`flex items-center gap-2 px-5 py-3.5 bg-transparent cursor-pointer transition-all border-0 border-b-[3px] ${activo ? 'border-b-accent opacity-100' : 'border-b-transparent opacity-50 hover:opacity-75'}`}>
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-lexend ${activo ? 'bg-accent text-white' : completo ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                {completo ? <Check size={14} /> : i + 1}
+            <button key={p.clave} onClick={() => irAPaso(i)}
+              className={`group relative flex items-center gap-2 px-5 py-3.5 bg-transparent cursor-pointer transition-all border-0 border-b-[3px] ${activo ? 'border-b-accent opacity-100' : incompleto ? 'border-b-accent/40 opacity-80' : 'border-b-transparent opacity-50 hover:opacity-75'}`}>
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-lexend ${activo ? 'bg-accent text-white' : completo ? 'bg-green-500 text-white' : incompleto ? 'bg-orange-100 text-accent border-2 border-accent' : 'bg-gray-200 text-gray-500'}`}>
+                {completo ? <Check size={14} /> : incompleto ? '!' : i + 1}
               </div>
-              <span className={`text-[13px] whitespace-nowrap font-lexend ${activo ? 'font-bold text-navy' : 'font-medium text-gray-500'}`}>{p.corta}</span>
+              <span className={`text-[13px] whitespace-nowrap font-lexend ${activo ? 'font-bold text-navy' : incompleto ? 'font-semibold text-accent' : 'font-medium text-gray-500'}`}>{p.corta}</span>
+              {incompleto && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 bg-navy text-white text-[11px] px-3 py-2 rounded-lg shadow-lg whitespace-nowrap z-50 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity">
+                  <div className="font-bold mb-0.5">Falta:</div>
+                  {validacion.faltantes.map((f) => <div key={f}>• {f}</div>)}
+                </div>
+              )}
             </button>
           )
         })}
@@ -1290,8 +1528,8 @@ export default function App() {
 
         {/* Navegación inferior */}
         <div className="flex justify-between mt-8 pt-5 border-t border-gray-100">
-          <Boton variante="secundario" icono={<ChevronLeft size={16} />} onClick={() => setPaso(Math.max(0, paso - 1))} deshabilitado={paso === 0}>Anterior</Boton>
-          {paso < PASOS.length - 1 && <Boton icono={<ChevronRight size={16} />} onClick={() => setPaso(Math.min(PASOS.length - 1, paso + 1))}>Siguiente</Boton>}
+          <Boton variante="secundario" icono={<ChevronLeft size={16} />} onClick={() => irAPaso(Math.max(0, paso - 1))} deshabilitado={paso === 0}>Anterior</Boton>
+          {paso < PASOS.length - 1 && <Boton icono={<ChevronRight size={16} />} onClick={() => irAPaso(Math.min(PASOS.length - 1, paso + 1))}>Siguiente</Boton>}
         </div>
       </div>
     </div>

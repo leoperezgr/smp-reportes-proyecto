@@ -11,7 +11,7 @@ El archivo de referencia que define el formato exacto es:
 
 ## Stack
 
-- **React 18** (app de una sola página, 5 pasos tipo wizard)
+- **React 18** (app de una sola página, 5 pasos tipo wizard + homepage)
 - **Vite** para desarrollo y build
 - **Tailwind CSS 3** para estilos
 - **docx** (npm, v9+) para generar el body del .docx en el navegador
@@ -19,6 +19,7 @@ El archivo de referencia que define el formato exacto es:
 - **file-saver** para la descarga
 - **lucide-react** para íconos
 - **Sin backend** — todo corre 100% en el navegador del usuario
+- **Persistencia**: localStorage (datos) + IndexedDB (fotos)
 - **Idioma de la interfaz**: TODO en español (componentes, variables, comentarios, UI)
 
 ---
@@ -48,7 +49,7 @@ El usuario tiene nivel técnico bajo. La UX debe ser:
 - Botones grandes y claros
 - Drag & drop visual para fotos
 - Sin diálogos complicados
-- Flujo lineal de 6 pasos
+- Flujo lineal de 5 pasos
 
 ---
 
@@ -67,7 +68,8 @@ smp-reportes/
 │   └── TEMPLATE-DEACERO.docx  ← Template base con headers/footers de DEACERO
 ├── src/
 │   ├── main.jsx           ← Entry point
-│   ├── App.jsx            ← Componente único con toda la app
+│   ├── App.jsx            ← Componente único con toda la app (~1,300 líneas)
+│   ├── almacenamiento.js  ← Capa de persistencia (localStorage + IndexedDB)
 │   └── index.css          ← Tailwind + estilos base
 └── referencia/
     ├── REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx
@@ -76,7 +78,7 @@ smp-reportes/
 
 ### Nota sobre la arquitectura
 
-El `App.jsx` actual es un **archivo único monolítico** con toda la lógica. Esto es intencional para el MVP. Conforme la app crezca, se puede refactorizar en:
+El `App.jsx` actual es un **archivo único monolítico** con toda la lógica (~1,300 líneas). La persistencia vive en `almacenamiento.js`. Esto es intencional para el MVP. Conforme la app crezca, se puede refactorizar en:
 
 ```
 src/
@@ -94,9 +96,19 @@ src/
 
 ---
 
-## Los 5 pasos de la app
+## Flujo de la app
 
-### Paso 1 — Configuración
+### Homepage — Panel de Reportes
+
+Pantalla inicial que muestra todos los reportes guardados:
+- Tarjetas con: nombre del buque, barra de progreso, última edición
+- Estadísticas: Total | Completados | En Progreso
+- Botones por reporte: Continuar, Descargar, Eliminar
+- Botón para crear nuevo reporte
+
+### Los 5 pasos del wizard
+
+#### Paso 1 — Configuración
 - Puerto (select: VER, ALT, LZC, MZT, MNZ, HOU, NOL)
 - Consecutivo (ej: "001")
 - Año
@@ -104,35 +116,85 @@ src/
 - Viaje (ej: "V01")
 - **Nota**: El cliente siempre es DEACERO (datos hardcodeados). No hay campos editables de cliente.
 
-### Paso 2 — Datos de Operación
+#### Paso 2 — Datos de Operación
+- Campo `arriboA`: ubicación de arribo (inline junto a "ARRIBO A ___")
 - Tabla de eventos con 5 filas fijas:
   ARRIBO | NOR TENDERED | ATRAQUE | INICIO OPERACIONES | TERMINO OPERACIONES
-  Cada una con: Mes (select), Día, Año, Hora
-- Fila adicional: CARGA TOTAL (ej: "19,919.000 MT")
+  Cada una con: Mes (select), Día, Año, Hora (auto-formato HH:MM al perder foco)
+- Fila adicional: CARGA TOTAL (ej: "19,919.000 MT") — auto-formato de tonelaje al perder foco
 - Cantidades Recibidas: filas dinámicas (Descripción, Tipo, Piezas, Tonelaje)
 - Bills of Lading: filas dinámicas (Número BL, Puerto, Piezas, Tonelaje)
 
-### Paso 3 — Stowage Plan
+#### Paso 3 — Stowage Plan
 - Tabla de bodegas: filas dinámicas (Bodega, Producto, Tonelaje)
-  - Default: 6 bodegas (No 01 a No 06)
+  - Default: 5 bodegas (No 01 a No 05)
   - Fila de TOTALES auto-calculada
 - Observaciones: textarea libre para texto largo
 
-### Paso 4 — Fotos (EL PASO CLAVE)
+#### Paso 4 — Fotos (EL PASO CLAVE)
 - **Fotos de portada**: 2 fotos del buque
 - **Fotos de bodegas**: subida masiva, asignación por bodega
+  - Pestañas de categoría arriba (Bodega 1, Bodega 2, ...) + botón "Todas" al final
+  - Zona de subida solo visible al seleccionar una categoría específica (no en "Todas")
+  - Encabezados de sección solo visibles en vista "Todas"
   - Drag & drop o clic para subir
-  - Cada foto se asigna a una bodega (Bodega 1, 2, 3...) o sección (DESCARGA DE BUQUE, AREA DE ALMACENAMIENTO, DOCUMENTOS)
+  - Cada foto se asigna a una bodega o sección (DESCARGA DE BUQUE, AREA DE ALMACENAMIENTO, DOCUMENTOS)
   - Reordenar fotos con drag & drop
   - Cambiar bodega con selector dropdown en cada foto
   - Preview en miniatura de cómo quedarán las páginas (2 fotos por página)
 
-### Paso 5 — Generar Reporte
+#### Paso 5 — Generar Reporte
 - Resumen visual de todo el contenido
 - Checklist de completitud
 - Preview miniatura de las páginas de fotos
 - Botón grande: "Generar Reporte .docx"
 - Descarga directa del archivo
+
+---
+
+## Persistencia y almacenamiento (`almacenamiento.js`)
+
+La app guarda reportes en progreso usando APIs nativas del navegador (sin backend):
+
+### localStorage — datos ligeros
+- `smp-reportes-indice` → Array de metadatos de reportes (id, nombre, fecha, progreso)
+- `smp-reporte-{id}` → JSON con datos del reporte (config, operacion, stowage, pasoActual, generado)
+
+### IndexedDB — fotos (blobs pesados)
+- Base de datos: `smp-reportes-db`
+- Object stores: `fotos`, `fotosPortada`
+- Key: `{reporteId}-{fotoId}`
+- Almacena: blob + metadata (categoriaKey, nombre, fotoId)
+
+### Funciones exportadas
+
+| Función | Tipo | Propósito |
+|---------|------|-----------|
+| `obtenerIndice()` | Sync | Obtiene lista de reportes de localStorage |
+| `guardarIndice(indice)` | Sync | Guarda lista de reportes en localStorage |
+| `guardarReporte(id, datos)` | Sync | Guarda datos de un reporte en localStorage |
+| `cargarReporte(id)` | Sync | Carga datos de un reporte de localStorage |
+| `eliminarReporte(id)` | Sync | Elimina reporte + lo remueve del índice |
+| `guardarFotosReporte(id, fotos, fotosPortada)` | Async | Guarda todas las fotos en IndexedDB |
+| `cargarFotosReporte(id)` | Async | Carga todas las fotos de un reporte de IndexedDB |
+| `eliminarFotosReporte(id)` | Async | Elimina todas las fotos de un reporte |
+| `calcularProgreso(datos)` | Sync | Calcula % de completitud del reporte |
+
+### Auto-guardado
+
+- Datos de texto: auto-guardado con debounce de **1.5 segundos** tras cada cambio
+- Fotos: guardado inmediato en IndexedDB cuando cambian
+- Flujo: estado React → useEffect detecta cambio → debounce → `flushGuardado()`
+
+### Cálculo de progreso (`calcularProgreso`)
+
+| Peso | Criterio |
+|------|----------|
+| 15%  | Nombre del buque presente |
+| 20%  | Eventos de operación + carga total |
+| 20%  | Bodegas con tonelaje |
+| 35%  | 2+ fotos de portada + fotos de bodegas |
+| 10%  | Reporte generado |
 
 ---
 
@@ -188,11 +250,13 @@ El cliente siempre es **DEACERO**. Header y footer vienen directamente del archi
 - Headers: NUMERO DE BL | PUERTO | PIEZAS | TONELAJE (MT)
 - Fila de TOTALES al final
 
+**Nota**: Las tablas incluyen filas separadoras con color (amarillo FFFF00, naranja FFC000) entre secciones.
+
 ### Página 3 — Stowage Plan + Observaciones
 
 **Tabla 4: Stowage Plan** (1701 + 2976 + 2348 = 7025 DXA)
 - Headers: BODEGA | PRODUCTO | TONELAJE (MT)
-- Filas: No 01 a No 06
+- Filas: No 01 a No 05 (default)
 - Fila de TOTALES al final
 
 Después de la tabla:
@@ -227,11 +291,12 @@ Secciones adicionales después de las bodegas (en este orden):
 6. Imágenes: siempre especificar `type: 'jpg'` o `type: 'png'`. La librería `docx` usa píxeles a 96 DPI en `transformation` (no puntos tipográficos a 72 DPI)
 7. Saltos de página: `new Paragraph({ children: [new PageBreak()] })`
 8. Nunca usar `\n` — usar `Paragraph` separados
-9. Font del documento: Calibri para todo el contenido del doc
+9. Font del documento: Calibri para todo el contenido del doc (Cambria en tablas específicas)
 10. Fotos de bodega: ordenar por bodega (1, 2, 3...) manteniendo el orden del usuario dentro de cada bodega
 11. Secciones después de bodegas siempre en orden: DESCARGA DE BUQUE → AREA DE ALMACENAMIENTO → DOCUMENTOS
 12. Tamaños de fotos en el .docx (píxeles a 96 DPI): portada 590px ancho, bodegas 590px ancho (2 por página), documentos 545px ancho (1 por página)
 13. `Packer.toBlob()` para generar y descargar con file-saver o link temporal
+14. Bordes de tabla: `size: 4`
 
 ---
 
@@ -245,14 +310,28 @@ Ejemplo: `REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
 
 ---
 
+## Utilidades en App.jsx
+
+| Función | Propósito |
+|---------|-----------|
+| `uid()` | Genera IDs aleatorios |
+| `leerComoDataURL(file)` | Lee archivo como data URL |
+| `leerComoArrayBuffer(file)` | Lee archivo como ArrayBuffer |
+| `leerImagen(dataURL)` | Carga imagen y retorna dimensiones |
+| `formatearHora(valor)` | Auto-formatea hora (ej: "1630" → "16:30") |
+| `parsearTonelaje(str)` | Parsea tonelaje con soporte de comas |
+| `formatearTonelaje(valor)` | Formatea número a 3 decimales (ej: "19,919.000") |
+| `obtenerDimensiones(dataURL)` | Detecta aspect ratio de imagen |
+| `actualizarProfundo(obj, ruta, valor)` | Actualización profunda de estado via dot notation |
+
+---
+
 ## Qué mejorar después del MVP
 
-- [ ] Guardar reporte en progreso (localStorage o Supabase)
 - [ ] Preview en tiempo real del documento (renderizar páginas como canvas)
 - [ ] Refactorizar App.jsx en componentes separados
 - [ ] @dnd-kit para drag & drop más robusto
 - [ ] Comprimir fotos antes de insertar (reducir peso del .docx)
-- [ ] Calcular altura de imagen proporcionalmente al aspect ratio real
 - [ ] Exportar/importar datos del reporte como JSON
 - [ ] Validación de campos obligatorios antes de generar
 
