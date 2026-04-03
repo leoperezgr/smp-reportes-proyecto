@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import {
-  Ship, Settings, Clock, Table2, Camera, Download, Upload,
+  Ship, Settings, Clock, Table2, Camera, Download, Upload, List,
   Trash2, GripVertical, Plus, Check, ChevronLeft, ChevronRight,
   Eye, FileText, Home, BarChart3, CheckCircle2, Loader2,
 } from 'lucide-react'
@@ -88,8 +88,18 @@ const leerComoArrayBuffer = (archivo) =>
 
 const leerImagen = async (archivo) => new Uint8Array(await leerComoArrayBuffer(archivo))
 
+const formatearHora = (v) => {
+  const s = String(v).replace(/[^0-9]/g, '')
+  if (s.length === 0) return ''
+  if (s.length <= 2) return s.padStart(2, '0') + ':00'
+  if (s.length === 3) return '0' + s[0] + ':' + s.slice(1)
+  return s.slice(0, 2) + ':' + s.slice(2, 4)
+}
+
+const parsearTonelaje = (v) => parseFloat(String(v).replace(/,/g, '')) || 0
+
 const formatearTonelaje = (v) => {
-  const n = parseFloat(v); if (isNaN(n)) return v || '0.000'
+  const n = parsearTonelaje(v); if (n === 0 && !v) return '0.000'
   return n.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 }
 
@@ -120,6 +130,7 @@ const configInicial = () => ({
 })
 
 const operacionInicial = () => ({
+  arriboA: '',
   eventos: EVENTOS.map((n) => ({ nombre: n, mes: '', dia: '', anio: String(new Date().getFullYear()), hora: '' })),
   cargaTotal: '',
   cantidades: [{ descripcion: '', tipo: 'LOTE', piezas: '1', tonelaje: '' }],
@@ -127,7 +138,7 @@ const operacionInicial = () => ({
 })
 
 const stowageInicial = () => ({
-  bodegas: Array.from({ length: 6 }, (_, i) => ({
+  bodegas: Array.from({ length: 5 }, (_, i) => ({
     numero: `No ${String(i + 1).padStart(2, '0')}`, producto: '', tonelaje: '0.000',
   })),
   observaciones: '',
@@ -235,7 +246,14 @@ function PasoOperacion({ operacion, setOperacion }) {
             <tbody>
               {operacion.eventos.map((ev, i) => (
                 <tr key={i} className="border-b border-gray-100">
-                  <td className="px-3 py-2 font-semibold text-navy font-lexend text-xs">{ev.nombre}</td>
+                  <td className="px-3 py-2 font-semibold text-navy font-lexend text-xs">
+                    {ev.nombre === 'ARRIBO' ? (
+                      <div className="flex items-center gap-1">
+                        <span>ARRIBO A</span>
+                        <input value={operacion.arriboA} onChange={(e) => act('arriboA', e.target.value)} placeholder="Veracruz" className="w-24 px-1.5 py-0.5 border border-gray-200 rounded-md text-xs font-normal" />
+                      </div>
+                    ) : ev.nombre}
+                  </td>
                   <td className="px-2 py-1.5">
                     <select value={ev.mes} onChange={(e) => act(`eventos.${i}.mes`, e.target.value)} className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs bg-white">
                       <option value="">—</option>
@@ -249,14 +267,22 @@ function PasoOperacion({ operacion, setOperacion }) {
                     </div>
                   </td>
                   <td className="px-2 py-1.5">
-                    <input value={ev.hora} onChange={(e) => act(`eventos.${i}.hora`, e.target.value)} placeholder="17:25 HRS" className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+                    <div className="flex items-center gap-1">
+                      <input value={ev.hora} onChange={(e) => act(`eventos.${i}.hora`, e.target.value)} onBlur={() => act(`eventos.${i}.hora`, formatearHora(ev.hora))} placeholder="16:30" className="w-20 px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+                      <span className="text-xs font-semibold text-navy">HRS</span>
+                    </div>
                   </td>
                 </tr>
               ))}
               <tr className="bg-accent-light">
                 <td className="px-3 py-2 font-bold text-accent font-lexend text-xs">CARGA TOTAL</td>
                 <td />
-                <td className="px-2 py-1.5"><input value={operacion.cargaTotal} onChange={(e) => act('cargaTotal', e.target.value)} placeholder="19,919.000 MT" className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs" /></td>
+                <td className="px-2 py-1.5">
+                  <div className="flex items-center gap-1">
+                    <input value={operacion.cargaTotal} onChange={(e) => act('cargaTotal', e.target.value)} onBlur={() => act('cargaTotal', formatearTonelaje(operacion.cargaTotal))} placeholder="19,919.000" className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+                    <span className="text-xs font-semibold text-accent">MT</span>
+                  </div>
+                </td>
                 <td />
               </tr>
             </tbody>
@@ -270,7 +296,7 @@ function PasoOperacion({ operacion, setOperacion }) {
             <Entrada etiqueta={i === 0 ? 'Descripción' : undefined} value={c.descripcion} onChange={(e) => act(`cantidades.${i}.descripcion`, e.target.value)} placeholder="PIG IRON IN BULK" />
             <Entrada etiqueta={i === 0 ? 'Tipo' : undefined} value={c.tipo} onChange={(e) => act(`cantidades.${i}.tipo`, e.target.value)} placeholder="LOTE" />
             <Entrada etiqueta={i === 0 ? 'Piezas' : undefined} value={c.piezas} onChange={(e) => act(`cantidades.${i}.piezas`, e.target.value)} placeholder="1" />
-            <Entrada etiqueta={i === 0 ? 'Tonelaje (MT)' : undefined} value={c.tonelaje} onChange={(e) => act(`cantidades.${i}.tonelaje`, e.target.value)} placeholder="19,919.000" />
+            <Entrada etiqueta={i === 0 ? 'Tonelaje (MT)' : undefined} value={c.tonelaje} onChange={(e) => act(`cantidades.${i}.tonelaje`, e.target.value)} onBlur={() => act(`cantidades.${i}.tonelaje`, formatearTonelaje(c.tonelaje))} placeholder="19,919.000" />
             <Boton variante="fantasma" className="!p-1.5 mb-0.5" onClick={() => setOperacion((p) => ({ ...p, cantidades: p.cantidades.filter((_, j) => j !== i) }))}><Trash2 size={16} className="text-red-500" /></Boton>
           </div>
         ))}
@@ -283,7 +309,7 @@ function PasoOperacion({ operacion, setOperacion }) {
             <Entrada etiqueta={i === 0 ? 'Número de BL' : undefined} value={bl.numero} onChange={(e) => act(`bls.${i}.numero`, e.target.value)} placeholder="BL-001" />
             <Entrada etiqueta={i === 0 ? 'Puerto/Producto' : undefined} value={bl.puerto} onChange={(e) => act(`bls.${i}.puerto`, e.target.value)} placeholder="PIG IRON" />
             <Entrada etiqueta={i === 0 ? 'Piezas' : undefined} value={bl.piezas} onChange={(e) => act(`bls.${i}.piezas`, e.target.value)} placeholder="1" />
-            <Entrada etiqueta={i === 0 ? 'Tonelaje (MT)' : undefined} value={bl.tonelaje} onChange={(e) => act(`bls.${i}.tonelaje`, e.target.value)} placeholder="19,919.000" />
+            <Entrada etiqueta={i === 0 ? 'Tonelaje (MT)' : undefined} value={bl.tonelaje} onChange={(e) => act(`bls.${i}.tonelaje`, e.target.value)} onBlur={() => act(`bls.${i}.tonelaje`, formatearTonelaje(bl.tonelaje))} placeholder="19,919.000" />
             <Boton variante="fantasma" className="!p-1.5 mb-0.5" onClick={() => setOperacion((p) => ({ ...p, bls: p.bls.filter((_, j) => j !== i) }))}><Trash2 size={16} className="text-red-500" /></Boton>
           </div>
         ))}
@@ -299,7 +325,7 @@ function PasoOperacion({ operacion, setOperacion }) {
 
 function PasoStowage({ stowage, setStowage }) {
   const act = (ruta, val) => setStowage((p) => actualizarProfundo(p, ruta, val))
-  const total = stowage.bodegas.reduce((s, b) => s + (parseFloat(b.tonelaje) || 0), 0)
+  const total = stowage.bodegas.reduce((s, b) => s + (parsearTonelaje(b.tonelaje)), 0)
 
   return (
     <div className="flex flex-col gap-6">
@@ -313,7 +339,7 @@ function PasoStowage({ stowage, setStowage }) {
               <tr key={i} className="border-b border-gray-100">
                 <td className="px-3 py-2 font-semibold text-navy font-lexend text-xs">{b.numero}</td>
                 <td className="px-2 py-1.5"><input value={b.producto} onChange={(e) => act(`bodegas.${i}.producto`, e.target.value)} placeholder={i % 2 === 1 ? 'EMPTY' : 'PIG IRON IN BULK'} className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs" /></td>
-                <td className="px-2 py-1.5"><input value={b.tonelaje} onChange={(e) => act(`bodegas.${i}.tonelaje`, e.target.value)} placeholder="0.000" className="w-[120px] px-2 py-1.5 border border-gray-200 rounded-md text-xs text-right" /></td>
+                <td className="px-2 py-1.5"><input value={b.tonelaje} onChange={(e) => act(`bodegas.${i}.tonelaje`, e.target.value)} onBlur={() => act(`bodegas.${i}.tonelaje`, formatearTonelaje(b.tonelaje))} placeholder="0.000" className="w-[120px] px-2 py-1.5 border border-gray-200 rounded-md text-xs text-right" /></td>
               </tr>
             ))}
             <tr className="bg-accent-light font-bold">
@@ -342,7 +368,7 @@ function PasoStowage({ stowage, setStowage }) {
 function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas }) {
   const inputRef = useRef(null)
   const inputPortadaRef = useRef(null)
-  const [bodegaSel, setBodegaSel] = useState(null)
+  const [bodegaSel, setBodegaSel] = useState(0)
   const [arrastrado, setArrastrado] = useState(null)
   const [sobre, setSobre] = useState(null)
 
@@ -359,16 +385,13 @@ function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas 
     return m
   }, [fotos, categorias])
 
-  const claveDefault = () => {
-    if (bodegaSel !== null && categorias[bodegaSel]) return categorias[bodegaSel].clave
-    return 'bodega-1'
-  }
+  const catActual = categorias[bodegaSel] || categorias[0]
 
   const procesarArchivos = async (archivos) => {
     const nuevas = []
     for (const a of archivos) {
       if (!a.type.startsWith('image/')) continue
-      nuevas.push({ id: uid(), archivo: a, dataUrl: await leerComoDataURL(a), categoriaKey: claveDefault(), nombre: a.name })
+      nuevas.push({ id: uid(), archivo: a, dataUrl: await leerComoDataURL(a), categoriaKey: catActual.clave, nombre: a.name })
     }
     setFotos((p) => [...p, ...nuevas])
   }
@@ -393,6 +416,8 @@ function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas 
     setArrastrado(null); setSobre(null)
   }
 
+  const verTodas = bodegaSel === 'todas'
+
   return (
     <div className="flex flex-col gap-6">
       {/* Portada */}
@@ -415,30 +440,34 @@ function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas 
       </Tarjeta>
 
       {/* Bodegas */}
-      <Tarjeta titulo="Fotos de Bodegas y Secciones" subtitulo={`${fotos.length} fotos · Arrastra para reordenar`} icono={<Camera size={22} />}>
-        {/* Drop zone */}
-        <div onDrop={manejarDrop} onDragOver={manejarDragOver} onDragLeave={manejarDragLeave} onClick={() => inputRef.current?.click()}
-          className="border-2 border-dashed border-gray-300 rounded-xl px-6 py-8 text-center mb-5 bg-gray-50 cursor-pointer transition-all hover:border-accent/50">
-          <Upload size={36} className="mx-auto text-gray-400" />
-          <p className="mt-3 mb-1 text-[15px] font-semibold text-navy font-lexend">Arrastra fotos aquí o haz clic para seleccionar</p>
-          <p className="m-0 text-[13px] text-gray-400">Se asignarán a <strong className="text-accent">{bodegaSel !== null ? categorias[bodegaSel]?.etiqueta : 'Bodega 1'}</strong></p>
-          <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => procesarArchivos(Array.from(e.target.files))} />
-        </div>
-
-        {/* Tabs */}
+      <Tarjeta titulo="Fotos de Bodegas y Secciones" subtitulo={`${fotos.length} fotos en total`} icono={<Camera size={22} />}>
+        {/* Tabs — bodegas primero, "Todas" al final y discreto */}
         <div className="flex gap-2 mb-5 flex-wrap">
-          <Boton variante={bodegaSel === null ? 'primario' : 'secundario'} className="!px-3.5 !py-1.5 !text-xs" onClick={() => setBodegaSel(null)}>Todas ({fotos.length})</Boton>
           {categorias.map((c, idx) => (
             <Boton key={c.clave} variante={bodegaSel === idx ? 'primario' : 'secundario'} className="!px-3.5 !py-1.5 !text-xs" onClick={() => setBodegaSel(idx)}>
               {c.etiqueta} ({fotosPorCat[c.clave]?.length || 0})
             </Boton>
           ))}
+          <button onClick={() => setBodegaSel('todas')} className={`px-3 py-1.5 text-[11px] rounded-lg border cursor-pointer font-lexend transition-colors ${verTodas ? 'bg-gray-200 border-gray-300 text-navy font-semibold' : 'bg-transparent border-gray-200 text-gray-400 hover:text-gray-500'}`}>
+            Todas ({fotos.length})
+          </button>
         </div>
 
+        {/* Drop zone — solo cuando hay una categoría seleccionada */}
+        {!verTodas && (
+          <div onDrop={manejarDrop} onDragOver={manejarDragOver} onDragLeave={manejarDragLeave} onClick={() => inputRef.current?.click()}
+            className="border-2 border-dashed border-gray-300 rounded-xl px-6 py-8 text-center mb-5 bg-gray-50 cursor-pointer transition-all hover:border-accent/50">
+            <Upload size={36} className="mx-auto text-gray-400" />
+            <p className="mt-3 mb-1 text-[15px] font-semibold text-navy font-lexend">Arrastra fotos aquí o haz clic para seleccionar</p>
+            <p className="m-0 text-[13px] text-gray-400">Se asignarán a <strong className="text-accent">{catActual?.etiqueta}</strong></p>
+            <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { procesarArchivos(Array.from(e.target.files)); e.target.value = '' }} />
+          </div>
+        )}
+
         {/* Grid */}
-        {(bodegaSel === null ? categorias : [categorias[bodegaSel]]).filter(Boolean).map((cat) => {
+        {(verTodas ? categorias : [catActual]).filter(Boolean).map((cat) => {
           const grupo = fotosPorCat[cat.clave] || []
-          if (grupo.length === 0 && bodegaSel !== null) return (
+          if (grupo.length === 0 && !verTodas) return (
             <div key={cat.clave} className="py-10 text-center text-gray-400">
               <Camera size={40} className="mx-auto text-gray-300 mb-3" />
               <p className="font-lexend text-sm">No hay fotos para {cat.etiqueta}</p>
@@ -447,7 +476,7 @@ function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas 
           if (grupo.length === 0) return null
           return (
             <div key={cat.clave} className="mb-6">
-              <h4 className="font-lexend text-sm font-bold text-accent m-0 mb-3 pb-2 border-b-2 border-accent-light">{cat.etiqueta.toUpperCase()} — {grupo.length} fotos</h4>
+              {verTodas && <h4 className="font-lexend text-sm font-bold text-accent m-0 mb-3 pb-2 border-b-2 border-accent-light">{cat.etiqueta.toUpperCase()} — {grupo.length} fotos</h4>}
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
                 {grupo.map((foto) => (
                   <div key={foto.id} draggable onDragStart={() => setArrastrado(foto.id)} onDragOver={(e) => { e.preventDefault(); if (arrastrado) setSobre(foto.id) }} onDragEnd={finalizarArrastre}
@@ -514,7 +543,7 @@ function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, generand
             <Chk ok={fotosPortada.length === 2} t="2 fotos de portada" />
             <Chk ok={!!config.buque} t="Nombre del buque" />
             <Chk ok={operacion.eventos.some((e) => e.mes)} t="Fechas de operación" />
-            <Chk ok={stowage.bodegas.some((b) => parseFloat(b.tonelaje) > 0)} t="Stowage plan" />
+            <Chk ok={stowage.bodegas.some((b) => parsearTonelaje(b.tonelaje) > 0)} t="Stowage plan" />
             <Chk ok={!!stowage.observaciones} t="Observaciones" />
             <Chk ok={fotos.length > 0} t={`${fotos.length} fotos de bodegas`} />
           </div>
@@ -564,7 +593,7 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada }) 
   const JSZip = (await import('jszip')).default
 
   // ─── Utilidades internas ───
-  const borde = { style: BorderStyle.SINGLE, size: 1, color: '000000' }
+  const borde = { style: BorderStyle.SINGLE, size: 4, color: '000000' }
   const bordes = { top: borde, bottom: borde, left: borde, right: borde }
 
   const celda = (texto, opts = {}) => new TableCell({
@@ -575,7 +604,7 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada }) 
     margins: { top: 40, bottom: 40, left: 80, right: 80 },
     children: [new Paragraph({
       alignment: opts.alineacion || AlignmentType.LEFT,
-      children: [new TextRun({ text: texto || '', bold: opts.negrita, size: opts.tamano || 20, font: 'Calibri', color: opts.color || '000000' })],
+      children: [new TextRun({ text: texto || '', bold: opts.negrita, size: opts.tamano || 20, font: opts.fuente || 'Calibri', color: opts.color || '000000' })],
     })],
   })
 
@@ -599,60 +628,84 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada }) 
   portada.push(new Paragraph({ children: [new PageBreak()] }))
 
   // ═══ PÁGINA 2: OPERACIÓN ═══
-  const filasEventos = operacion.eventos.map((ev) =>
-    new TableRow({ children: [
-      celda(ev.nombre, { ancho: TABLA_EVENTOS.cols[0], negrita: true }),
-      celda(`${ev.mes}                  ${ev.dia},  ${ev.anio}       ${ev.hora}`, { ancho: TABLA_EVENTOS.cols[1] }),
+  const filasEventos = operacion.eventos.map((ev) => {
+    const nombreEvento = ev.nombre === 'ARRIBO' && operacion.arriboA ? `ARRIBO A ${operacion.arriboA.toUpperCase()}` : ev.nombre
+    return new TableRow({ children: [
+      celda(nombreEvento, { ancho: TABLA_EVENTOS.cols[0], negrita: true, tamano: 22 }),
+      celda(`${ev.mes}                  ${ev.dia},  ${ev.anio}       ${ev.hora}${ev.hora ? ' HRS' : ''}`, { ancho: TABLA_EVENTOS.cols[1], tamano: 22 }),
     ] })
-  )
+  })
   filasEventos.push(new TableRow({ children: [
-    celda('CARGA TOTAL', { ancho: TABLA_EVENTOS.cols[0], negrita: true }),
-    celda(`                            ${operacion.cargaTotal}`, { ancho: TABLA_EVENTOS.cols[1], negrita: true }),
+    celda('CARGA TOTAL', { ancho: TABLA_EVENTOS.cols[0], negrita: true, tamano: 22 }),
+    celda(`                            ${operacion.cargaTotal}${operacion.cargaTotal ? ' MT' : ''}`, { ancho: TABLA_EVENTOS.cols[1], negrita: true, tamano: 22 }),
   ] }))
 
   const tablaEventos = new Table({ width: { size: TABLA_EVENTOS.total, type: WidthType.DXA }, columnWidths: TABLA_EVENTOS.cols, rows: filasEventos })
-  const tituloSeccion = (texto) => new Paragraph({ spacing: { before: 200, after: 100 }, children: [new TextRun({ text: texto, bold: true, size: 24, font: 'Calibri' })] })
 
+  // Fila separadora de color (amarilla o naranja) para tablas 2-4
+  const filaSeparadora = (cols, color) => new TableRow({ children: cols.map((ancho) => celda('', { ancho, fondo: color })) })
+
+  const cb = { fuente: 'Cambria', tamano: 22 } // Cambria 11 para tablas de cantidades y BL
   const filasCant = [
-    new TableRow({ children: [celda('DESCRIPCION DEL PRODUCTO', { ancho: TABLA_CANTIDADES.cols[0], negrita: true }), celda('TIPO', { ancho: TABLA_CANTIDADES.cols[1], negrita: true }), celda('PIEZA', { ancho: TABLA_CANTIDADES.cols[2], negrita: true }), celda('TONELAJE (MT)', { ancho: TABLA_CANTIDADES.cols[3], negrita: true })] }),
-    ...operacion.cantidades.map((c) => new TableRow({ children: [celda(c.descripcion, { ancho: TABLA_CANTIDADES.cols[0] }), celda(c.tipo, { ancho: TABLA_CANTIDADES.cols[1] }), celda(c.piezas, { ancho: TABLA_CANTIDADES.cols[2], alineacion: AlignmentType.CENTER }), celda(c.tonelaje, { ancho: TABLA_CANTIDADES.cols[3], alineacion: AlignmentType.RIGHT })] })),
-    new TableRow({ children: [celda('TOTAL', { ancho: TABLA_CANTIDADES.cols[0], negrita: true }), celda('', { ancho: TABLA_CANTIDADES.cols[1] }), celda(String(operacion.cantidades.reduce((s, c) => s + (parseInt(c.piezas) || 0), 0)), { ancho: TABLA_CANTIDADES.cols[2], alineacion: AlignmentType.CENTER }), celda(formatearTonelaje(operacion.cantidades.reduce((s, c) => s + (parseFloat(c.tonelaje) || 0), 0)), { ancho: TABLA_CANTIDADES.cols[3], alineacion: AlignmentType.RIGHT, negrita: true })] }),
+    new TableRow({ children: [celda('DESCRIPCION DEL PRODUCTO', { ancho: TABLA_CANTIDADES.cols[0], negrita: false, alineacion: AlignmentType.CENTER, ...cb }), celda('TIPO', { ancho: TABLA_CANTIDADES.cols[1], negrita: false, alineacion: AlignmentType.CENTER, ...cb }), celda('PIEZA', { ancho: TABLA_CANTIDADES.cols[2], negrita: false, alineacion: AlignmentType.CENTER, ...cb }), celda('TONELAJE (MT)', { ancho: TABLA_CANTIDADES.cols[3], negrita: false, alineacion: AlignmentType.CENTER, ...cb })] }),
+    filaSeparadora(TABLA_CANTIDADES.cols, 'FFFF00'),
+    ...operacion.cantidades.map((c) => new TableRow({ children: [celda(c.descripcion, { ancho: TABLA_CANTIDADES.cols[0], negrita: true, ...cb }), celda(c.tipo, { ancho: TABLA_CANTIDADES.cols[1], alineacion: AlignmentType.CENTER, ...cb }), celda(c.piezas, { ancho: TABLA_CANTIDADES.cols[2], alineacion: AlignmentType.CENTER, negrita: true, ...cb }), celda(c.tonelaje, { ancho: TABLA_CANTIDADES.cols[3], alineacion: AlignmentType.CENTER, negrita: true, ...cb })] })),
+    filaSeparadora(TABLA_CANTIDADES.cols, 'FFC000'),
+    new TableRow({ children: [celda('TOTAL', { ancho: TABLA_CANTIDADES.cols[0], negrita: true, alineacion: AlignmentType.CENTER, ...cb }), celda('', { ancho: TABLA_CANTIDADES.cols[1], alineacion: AlignmentType.CENTER, ...cb }), celda(String(operacion.cantidades.reduce((s, c) => s + (parseInt(c.piezas) || 0), 0)), { ancho: TABLA_CANTIDADES.cols[2], alineacion: AlignmentType.CENTER, negrita: true, ...cb }), celda(formatearTonelaje(operacion.cantidades.reduce((s, c) => s + parsearTonelaje(c.tonelaje), 0)), { ancho: TABLA_CANTIDADES.cols[3], alineacion: AlignmentType.CENTER, negrita: true, ...cb })] }),
   ]
   const tablaCant = new Table({ width: { size: TABLA_CANTIDADES.total, type: WidthType.DXA }, columnWidths: TABLA_CANTIDADES.cols, rows: filasCant })
 
   const filasBL = [
-    new TableRow({ children: [celda('NUMERO DE BL', { ancho: TABLA_BL.cols[0], negrita: true }), celda('PUERTO', { ancho: TABLA_BL.cols[1], negrita: true }), celda('PIEZAS', { ancho: TABLA_BL.cols[2], negrita: true }), celda('TONELAJE (MT)', { ancho: TABLA_BL.cols[3], negrita: true })] }),
-    ...operacion.bls.map((bl) => new TableRow({ children: [celda(bl.numero, { ancho: TABLA_BL.cols[0] }), celda(bl.puerto, { ancho: TABLA_BL.cols[1] }), celda(bl.piezas, { ancho: TABLA_BL.cols[2], alineacion: AlignmentType.CENTER }), celda(bl.tonelaje, { ancho: TABLA_BL.cols[3], alineacion: AlignmentType.RIGHT })] })),
-    new TableRow({ children: [celda('TOTALES', { ancho: TABLA_BL.cols[0], negrita: true }), celda('', { ancho: TABLA_BL.cols[1] }), celda(String(operacion.bls.reduce((s, b) => s + (parseInt(b.piezas) || 0), 0)), { ancho: TABLA_BL.cols[2], alineacion: AlignmentType.CENTER }), celda(formatearTonelaje(operacion.bls.reduce((s, b) => s + (parseFloat(b.tonelaje) || 0), 0)), { ancho: TABLA_BL.cols[3], alineacion: AlignmentType.RIGHT, negrita: true })] }),
+    new TableRow({ children: [celda('NUMERO DE BL', { ancho: TABLA_BL.cols[0], negrita: false, alineacion: AlignmentType.CENTER, ...cb }), celda('PUERTO', { ancho: TABLA_BL.cols[1], negrita: false, alineacion: AlignmentType.CENTER, ...cb }), celda('PIEZAS', { ancho: TABLA_BL.cols[2], negrita: false, alineacion: AlignmentType.CENTER, ...cb }), celda('TONELAJE (MT)', { ancho: TABLA_BL.cols[3], negrita: false, alineacion: AlignmentType.CENTER, ...cb })] }),
+    filaSeparadora(TABLA_BL.cols, 'FFFF00'),
+    ...operacion.bls.map((bl) => new TableRow({ children: [celda(bl.numero, { ancho: TABLA_BL.cols[0], ...cb }), celda(bl.puerto, { ancho: TABLA_BL.cols[1], alineacion: AlignmentType.CENTER, negrita: true, ...cb }), celda(bl.piezas, { ancho: TABLA_BL.cols[2], alineacion: AlignmentType.CENTER, negrita: true, ...cb }), celda(bl.tonelaje, { ancho: TABLA_BL.cols[3], alineacion: AlignmentType.CENTER, negrita: true, ...cb })] })),
+    filaSeparadora(TABLA_BL.cols, 'FFC000'),
+    new TableRow({ children: [celda('TOTALES', { ancho: TABLA_BL.cols[0], negrita: false, ...cb }), celda('', { ancho: TABLA_BL.cols[1], alineacion: AlignmentType.CENTER, ...cb }), celda(String(operacion.bls.reduce((s, b) => s + (parseInt(b.piezas) || 0), 0)), { ancho: TABLA_BL.cols[2], alineacion: AlignmentType.CENTER, negrita: true, ...cb }), celda(formatearTonelaje(operacion.bls.reduce((s, b) => s + (parsearTonelaje(b.tonelaje)), 0)), { ancho: TABLA_BL.cols[3], alineacion: AlignmentType.CENTER, negrita: true, ...cb })] }),
   ]
   const tablaBL = new Table({ width: { size: TABLA_BL.total, type: WidthType.DXA }, columnWidths: TABLA_BL.cols, rows: filasBL })
 
   const pag2 = [
+    new Paragraph({ children: [] }),
+    new Paragraph({ children: [] }),
     tablaEventos,
-    tituloSeccion('CANTIDADES RECIBIDAS'),
-    new Paragraph({ children: [new TextRun({ text: CLIENTE.nombre, bold: true, size: 20, font: 'Calibri' })] }),
+    new Paragraph({ children: [] }),
+    new Paragraph({ children: [new TextRun({ text: 'CANTIDADES RECIBIDAS  :', bold: true, size: 36, font: 'Calibri' })] }),
+    new Paragraph({ children: [] }),
+    new Paragraph({ children: [] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: CLIENTE.nombre, bold: true, size: 32, font: 'Calibri' })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [] }),
     tablaCant,
-    tituloSeccion('GRAN TOTAL'),
+    new Paragraph({ children: [] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'GRAN TOTAL', bold: true, size: 28, font: 'Calibri' })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [] }),
     tablaBL,
     new Paragraph({ children: [new PageBreak()] }),
   ]
 
   // ═══ PÁGINA 3: STOWAGE + OBSERVACIONES ═══
+  const stowFont = 'Cambria'
   const filasStow = [
-    new TableRow({ children: [celda('BODEGA', { ancho: TABLA_STOWAGE.cols[0], negrita: true, alineacion: AlignmentType.CENTER }), celda('PRODUCTO', { ancho: TABLA_STOWAGE.cols[1], negrita: true, alineacion: AlignmentType.CENTER }), celda('TONELAJE (MT)', { ancho: TABLA_STOWAGE.cols[2], negrita: true, alineacion: AlignmentType.CENTER })] }),
-    ...stowage.bodegas.map((b) => new TableRow({ children: [celda(b.numero, { ancho: TABLA_STOWAGE.cols[0], alineacion: AlignmentType.CENTER }), celda(b.producto, { ancho: TABLA_STOWAGE.cols[1], alineacion: AlignmentType.CENTER }), celda(b.tonelaje, { ancho: TABLA_STOWAGE.cols[2], alineacion: AlignmentType.CENTER })] })),
-    new TableRow({ children: [celda('TOTALES', { ancho: TABLA_STOWAGE.cols[0], negrita: true, alineacion: AlignmentType.CENTER }), celda('', { ancho: TABLA_STOWAGE.cols[1] }), celda(formatearTonelaje(stowage.bodegas.reduce((s, b) => s + (parseFloat(b.tonelaje) || 0), 0)), { ancho: TABLA_STOWAGE.cols[2], negrita: true, alineacion: AlignmentType.CENTER })] }),
+    new TableRow({ children: [celda('BODEGA', { ancho: TABLA_STOWAGE.cols[0], negrita: false, alineacion: AlignmentType.CENTER, fuente: stowFont }), celda('PRODUCTO', { ancho: TABLA_STOWAGE.cols[1], negrita: false, alineacion: AlignmentType.CENTER, fuente: stowFont }), celda('TONELAJE (MT)', { ancho: TABLA_STOWAGE.cols[2], negrita: false, alineacion: AlignmentType.CENTER, fuente: stowFont })] }),
+    filaSeparadora(TABLA_STOWAGE.cols, 'FFFF00'),
+    ...stowage.bodegas.map((b) => new TableRow({ children: [celda(b.numero, { ancho: TABLA_STOWAGE.cols[0], negrita: true, alineacion: AlignmentType.CENTER, fuente: stowFont }), celda(b.producto, { ancho: TABLA_STOWAGE.cols[1], negrita: true, alineacion: AlignmentType.CENTER, fuente: stowFont }), celda(b.tonelaje, { ancho: TABLA_STOWAGE.cols[2], negrita: true, alineacion: AlignmentType.CENTER, fuente: stowFont })] })),
+    filaSeparadora(TABLA_STOWAGE.cols, 'FFC000'),
+    new TableRow({ children: [celda('TOTALES', { ancho: TABLA_STOWAGE.cols[0], negrita: true, alineacion: AlignmentType.CENTER, fuente: stowFont }), celda('', { ancho: TABLA_STOWAGE.cols[1], alineacion: AlignmentType.CENTER, fuente: stowFont }), celda(formatearTonelaje(stowage.bodegas.reduce((s, b) => s + (parsearTonelaje(b.tonelaje)), 0)), { ancho: TABLA_STOWAGE.cols[2], negrita: true, alineacion: AlignmentType.CENTER, fuente: stowFont })] }),
   ]
-  const tablaStow = new Table({ width: { size: TABLA_STOWAGE.total, type: WidthType.DXA }, columnWidths: TABLA_STOWAGE.cols, rows: filasStow })
+  const tablaStow = new Table({ indent: { size: 1101, type: WidthType.DXA }, width: { size: TABLA_STOWAGE.total, type: WidthType.DXA }, columnWidths: TABLA_STOWAGE.cols, rows: filasStow })
 
   const obsParrs = stowage.observaciones
-    ? stowage.observaciones.split(/\n+/).map((l) => new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: l, size: 18, font: 'Calibri' })] }))
+    ? stowage.observaciones.toUpperCase().split(/\n+/).map((l, i) => new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { before: i === 0 ? 80 : 0, after: 100, line: 276 }, children: [new TextRun({ text: l, bold: true, size: 20, font: 'Arial' })] }))
     : [new Paragraph({ children: [] })]
 
   const pag3 = [
-    tituloSeccion('STOWAGE PLAN'),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'STOWAGE PLAN', bold: true, size: 28, font: 'Cambria' })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [] }),
     tablaStow,
-    new Paragraph({ spacing: { before: 300 }, children: [new TextRun({ text: 'OBSERVACIONES:', bold: true, size: 24, font: 'Calibri' })] }),
+    new Paragraph({ children: [] }),
+    new Paragraph({ children: [] }),
+    new Paragraph({ alignment: AlignmentType.JUSTIFIED, children: [new TextRun({ text: 'OBSERVACIONES  :  ', bold: true, font: 'Arial' })] }),
     ...obsParrs,
     new Paragraph({ children: [new PageBreak()] }),
   ]
