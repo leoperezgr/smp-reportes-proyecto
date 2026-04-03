@@ -1,0 +1,900 @@
+import { useState, useRef, useMemo } from 'react'
+import {
+  Ship, Settings, Clock, Table2, Camera, List, Download, Upload,
+  Trash2, GripVertical, Plus, Check, ChevronLeft, ChevronRight,
+  Eye, FileText,
+} from 'lucide-react'
+
+// ═══════════════════════════════════════════════════════════════════
+// CONSTANTES
+// ═══════════════════════════════════════════════════════════════════
+
+const NAVY = '#0C1D2E'
+const ACCENT = '#EA580C'
+
+const PUERTOS = [
+  { codigo: 'VER', nombre: 'Veracruz' },
+  { codigo: 'ALT', nombre: 'Altamira' },
+  { codigo: 'LZC', nombre: 'Lázaro Cárdenas' },
+  { codigo: 'MZT', nombre: 'Mazatlán' },
+  { codigo: 'MNZ', nombre: 'Manzanillo' },
+  { codigo: 'HOU', nombre: 'Houston' },
+  { codigo: 'NOL', nombre: 'New Orleans' },
+]
+
+const EVENTOS = [
+  'ARRIBO',
+  'NOR TENDERED',
+  'ATRAQUE',
+  'INICIO OPERACIONES',
+  'TERMINO OPERACIONES',
+]
+
+const MESES = [
+  'ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+  'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE',
+]
+
+const SECCIONES_EXTRA = [
+  'DESCARGA DE BUQUE',
+  'AREA DE ALMACENAMIENTO',
+  'DOCUMENTOS',
+]
+
+const PASOS = [
+  { clave: 'config', etiqueta: 'Configuración', corta: 'Config', icono: Settings },
+  { clave: 'operacion', etiqueta: 'Datos de Operación', corta: 'Operación', icono: Clock },
+  { clave: 'stowage', etiqueta: 'Stowage Plan', corta: 'Stowage', icono: Table2 },
+  { clave: 'fotos', etiqueta: 'Fotos de Bodegas', corta: 'Fotos', icono: Camera },
+  { clave: 'sof', etiqueta: 'Statements of Facts', corta: 'SOF', icono: List },
+  { clave: 'generar', etiqueta: 'Generar Reporte', corta: 'Generar', icono: Download },
+]
+
+// Medidas exactas del documento original (DXA: 1440 = 1 pulgada)
+const DOC = {
+  anchoHoja: 12240,
+  altoHoja: 15840,
+  margenTop: 1417,
+  margenBottom: 1417,
+  margenLeft: 1701,
+  margenRight: 1701,
+  header: 708,
+  footer: 708,
+  anchoContenido: 8838, // 12240 - 1701*2
+  // EMU: 914400 = 1 pulgada
+  anchoImagenEMU: 5612130, // ancho de foto = ancho de contenido completo (6.14 pulgadas)
+}
+
+// Anchos de tablas del documento original
+const TABLA_EVENTOS = { cols: [4416, 4412], total: 8828 }
+const TABLA_CANTIDADES = { cols: [4600, 1035, 978, 2215], total: 8828 }
+const TABLA_BL = { cols: [2802, 2976, 993, 2348], total: 9119 }
+const TABLA_STOWAGE = { cols: [1701, 2976, 2348], total: 7025 }
+
+// ═══════════════════════════════════════════════════════════════════
+// UTILIDADES
+// ═══════════════════════════════════════════════════════════════════
+
+const uid = () => Math.random().toString(36).slice(2, 10)
+
+const leerComoDataURL = (archivo) =>
+  new Promise((r) => { const l = new FileReader(); l.onload = () => r(l.result); l.readAsDataURL(archivo) })
+
+const leerComoArrayBuffer = (archivo) =>
+  new Promise((r) => { const l = new FileReader(); l.onload = () => r(l.result); l.readAsArrayBuffer(archivo) })
+
+const leerImagen = async (archivo) => new Uint8Array(await leerComoArrayBuffer(archivo))
+
+const formatearTonelaje = (v) => {
+  const n = parseFloat(v); if (isNaN(n)) return v || '0.000'
+  return n.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+}
+
+const obtenerDimensiones = (archivo) =>
+  new Promise((r) => {
+    const img = new Image()
+    img.onload = () => { r({ ancho: img.naturalWidth, alto: img.naturalHeight }); URL.revokeObjectURL(img.src) }
+    img.src = URL.createObjectURL(archivo)
+  })
+
+// Actualiza un campo anidado por ruta de puntos: "eventos.0.mes"
+const actualizarProfundo = (obj, ruta, valor) => {
+  const copia = JSON.parse(JSON.stringify(obj))
+  const claves = ruta.split('.')
+  let actual = copia
+  for (let i = 0; i < claves.length - 1; i++) actual = actual[claves[i]]
+  actual[claves[claves.length - 1]] = valor
+  return copia
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// VALORES INICIALES
+// ═══════════════════════════════════════════════════════════════════
+
+const configInicial = () => ({
+  puerto: 'VER', consecutivo: '001', anio: String(new Date().getFullYear()),
+  buque: '', viaje: 'V01',
+})
+
+const operacionInicial = () => ({
+  eventos: EVENTOS.map((n) => ({ nombre: n, mes: '', dia: '', anio: String(new Date().getFullYear()), hora: '' })),
+  cargaTotal: '',
+  cantidades: [{ descripcion: '', tipo: 'LOTE', piezas: '1', tonelaje: '' }],
+  bls: [{ numero: '', puerto: '', piezas: '1', tonelaje: '' }],
+})
+
+const stowageInicial = () => ({
+  bodegas: Array.from({ length: 6 }, (_, i) => ({
+    numero: `No ${String(i + 1).padStart(2, '0')}`, producto: '', tonelaje: '0.000',
+  })),
+  observaciones: '',
+})
+
+const sofInicial = () => ({
+  entradas: [{ fecha: '', diaSemana: '', lineas: [{ horaInicio: '', horaFin: '', actividad: '' }] }],
+})
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPONENTES DE UI
+// ═══════════════════════════════════════════════════════════════════
+
+function Tarjeta({ titulo, subtitulo, icono, children }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {titulo && (
+        <div className="px-7 py-5 border-b border-gray-100 flex items-center gap-3">
+          {icono && <div className="text-accent">{icono}</div>}
+          <div>
+            <h3 className="m-0 text-base font-semibold text-navy font-lexend">{titulo}</h3>
+            {subtitulo && <p className="mt-0.5 text-[13px] text-gray-400 mb-0">{subtitulo}</p>}
+          </div>
+        </div>
+      )}
+      <div className="px-7 py-6">{children}</div>
+    </div>
+  )
+}
+
+function Entrada({ etiqueta, className = '', ...props }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {etiqueta && <label className="text-xs font-medium text-gray-400 font-lexend uppercase tracking-wider">{etiqueta}</label>}
+      <input {...props} className={`px-3.5 py-2.5 border-[1.5px] border-gray-200 rounded-lg text-sm font-source text-navy bg-white placeholder:text-gray-300 ${className}`} />
+    </div>
+  )
+}
+
+function Boton({ children, variante = 'primario', icono, className = '', deshabilitado, ...props }) {
+  const estilos = {
+    primario: 'bg-accent text-white hover:bg-orange-700',
+    secundario: 'bg-white text-navy border-[1.5px] border-gray-200 hover:border-gray-300 hover:bg-gray-50',
+    fantasma: 'bg-transparent text-gray-500 hover:text-navy hover:bg-gray-50',
+    peligro: 'bg-red-50 text-red-600 hover:bg-red-100',
+  }
+  return (
+    <button disabled={deshabilitado} {...props}
+      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-lexend cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed ${estilos[variante] || estilos.primario} ${className}`}>
+      {icono}{children}
+    </button>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PASO 1: CONFIGURACIÓN
+// ═══════════════════════════════════════════════════════════════════
+
+function PasoConfig({ config, setConfig }) {
+  const act = (c) => (e) => setConfig((p) => ({ ...p, [c]: e.target.value }))
+  return (
+    <div className="flex flex-col gap-6">
+      <Tarjeta titulo="Datos del Buque" subtitulo="Información principal de la embarcación" icono={<Ship size={22} />}>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-400 font-lexend uppercase tracking-wider">Puerto</label>
+            <select value={config.puerto} onChange={act('puerto')} className="px-3.5 py-2.5 border-[1.5px] border-gray-200 rounded-lg text-sm font-source text-navy bg-white cursor-pointer">
+              {PUERTOS.map((p) => <option key={p.codigo} value={p.codigo}>{p.codigo} — {p.nombre}</option>)}
+            </select>
+          </div>
+          <Entrada etiqueta="Consecutivo" value={config.consecutivo} onChange={act('consecutivo')} placeholder="001" />
+          <Entrada etiqueta="Año" value={config.anio} onChange={act('anio')} placeholder="2026" />
+        </div>
+        <div className="grid grid-cols-[2fr_1fr] gap-4 mt-4">
+          <Entrada etiqueta="Nombre del Buque" value={config.buque} onChange={act('buque')} placeholder="STELLAR INDIGO" />
+          <Entrada etiqueta="Viaje" value={config.viaje} onChange={act('viaje')} placeholder="V01" />
+        </div>
+      </Tarjeta>
+      <Tarjeta titulo="Cliente" subtitulo="Datos fijos de DEACERO" icono={<Settings size={22} />}>
+        <div className="p-4 bg-gray-50 rounded-xl text-sm text-gray-600 font-source">
+          <p className="m-0 mb-1"><strong className="text-navy">DEACERO SAPI DE CV</strong> — DEA7103086X2</p>
+          <p className="m-0 mb-1">Av. Lázaro Cárdenas 2333, Col. Valle Oriente, San Pedro Garza Garcia, Nuevo Leon. CP 66269</p>
+          <p className="m-0">Tel. 01 800 021 33 22</p>
+        </div>
+      </Tarjeta>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PASO 2: DATOS DE OPERACIÓN
+// ═══════════════════════════════════════════════════════════════════
+
+function PasoOperacion({ operacion, setOperacion }) {
+  const act = (ruta, val) => setOperacion((p) => actualizarProfundo(p, ruta, val))
+  return (
+    <div className="flex flex-col gap-6">
+      <Tarjeta titulo="Fechas y Horarios" subtitulo="Eventos principales de la operación" icono={<Clock size={22} />}>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr className="bg-navy text-white">
+                {['Evento', 'Mes', 'Día, Año', 'Hora'].map((h) => (
+                  <th key={h} className="px-3 py-2.5 text-left font-lexend font-semibold">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {operacion.eventos.map((ev, i) => (
+                <tr key={i} className="border-b border-gray-100">
+                  <td className="px-3 py-2 font-semibold text-navy font-lexend text-xs">{ev.nombre}</td>
+                  <td className="px-2 py-1.5">
+                    <select value={ev.mes} onChange={(e) => act(`eventos.${i}.mes`, e.target.value)} className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs bg-white">
+                      <option value="">—</option>
+                      {MESES.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex gap-1.5">
+                      <input value={ev.dia} onChange={(e) => act(`eventos.${i}.dia`, e.target.value)} placeholder="16" className="w-10 px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+                      <input value={ev.anio} onChange={(e) => act(`eventos.${i}.anio`, e.target.value)} placeholder="2026" className="w-[52px] px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+                    </div>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <input value={ev.hora} onChange={(e) => act(`eventos.${i}.hora`, e.target.value)} placeholder="17:25 HRS" className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+                  </td>
+                </tr>
+              ))}
+              <tr className="bg-accent-light">
+                <td className="px-3 py-2 font-bold text-accent font-lexend text-xs">CARGA TOTAL</td>
+                <td />
+                <td className="px-2 py-1.5"><input value={operacion.cargaTotal} onChange={(e) => act('cargaTotal', e.target.value)} placeholder="19,919.000 MT" className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs" /></td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Tarjeta>
+
+      <Tarjeta titulo="Cantidades Recibidas" icono={<List size={22} />}>
+        {operacion.cantidades.map((c, i) => (
+          <div key={i} className="grid grid-cols-[2fr_1fr_80px_1fr_40px] gap-2.5 mb-2.5 items-end">
+            <Entrada etiqueta={i === 0 ? 'Descripción' : undefined} value={c.descripcion} onChange={(e) => act(`cantidades.${i}.descripcion`, e.target.value)} placeholder="PIG IRON IN BULK" />
+            <Entrada etiqueta={i === 0 ? 'Tipo' : undefined} value={c.tipo} onChange={(e) => act(`cantidades.${i}.tipo`, e.target.value)} placeholder="LOTE" />
+            <Entrada etiqueta={i === 0 ? 'Piezas' : undefined} value={c.piezas} onChange={(e) => act(`cantidades.${i}.piezas`, e.target.value)} placeholder="1" />
+            <Entrada etiqueta={i === 0 ? 'Tonelaje (MT)' : undefined} value={c.tonelaje} onChange={(e) => act(`cantidades.${i}.tonelaje`, e.target.value)} placeholder="19,919.000" />
+            <Boton variante="fantasma" className="!p-1.5 mb-0.5" onClick={() => setOperacion((p) => ({ ...p, cantidades: p.cantidades.filter((_, j) => j !== i) }))}><Trash2 size={16} className="text-red-500" /></Boton>
+          </div>
+        ))}
+        <Boton variante="secundario" icono={<Plus size={16} />} onClick={() => setOperacion((p) => ({ ...p, cantidades: [...p.cantidades, { descripcion: '', tipo: 'LOTE', piezas: '1', tonelaje: '' }] }))}>Agregar producto</Boton>
+      </Tarjeta>
+
+      <Tarjeta titulo="Bills of Lading (BL)" icono={<FileText size={22} />}>
+        {operacion.bls.map((bl, i) => (
+          <div key={i} className="grid grid-cols-[1fr_1fr_80px_1fr_40px] gap-2.5 mb-2.5 items-end">
+            <Entrada etiqueta={i === 0 ? 'Número de BL' : undefined} value={bl.numero} onChange={(e) => act(`bls.${i}.numero`, e.target.value)} placeholder="BL-001" />
+            <Entrada etiqueta={i === 0 ? 'Puerto/Producto' : undefined} value={bl.puerto} onChange={(e) => act(`bls.${i}.puerto`, e.target.value)} placeholder="PIG IRON" />
+            <Entrada etiqueta={i === 0 ? 'Piezas' : undefined} value={bl.piezas} onChange={(e) => act(`bls.${i}.piezas`, e.target.value)} placeholder="1" />
+            <Entrada etiqueta={i === 0 ? 'Tonelaje (MT)' : undefined} value={bl.tonelaje} onChange={(e) => act(`bls.${i}.tonelaje`, e.target.value)} placeholder="19,919.000" />
+            <Boton variante="fantasma" className="!p-1.5 mb-0.5" onClick={() => setOperacion((p) => ({ ...p, bls: p.bls.filter((_, j) => j !== i) }))}><Trash2 size={16} className="text-red-500" /></Boton>
+          </div>
+        ))}
+        <Boton variante="secundario" icono={<Plus size={16} />} onClick={() => setOperacion((p) => ({ ...p, bls: [...p.bls, { numero: '', puerto: '', piezas: '1', tonelaje: '' }] }))}>Agregar BL</Boton>
+      </Tarjeta>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PASO 3: STOWAGE PLAN
+// ═══════════════════════════════════════════════════════════════════
+
+function PasoStowage({ stowage, setStowage }) {
+  const act = (ruta, val) => setStowage((p) => actualizarProfundo(p, ruta, val))
+  const total = stowage.bodegas.reduce((s, b) => s + (parseFloat(b.tonelaje) || 0), 0)
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Tarjeta titulo="Stowage Plan" subtitulo="Distribución de carga por bodega" icono={<Table2 size={22} />}>
+        <table className="w-full border-collapse text-[13px]">
+          <thead><tr className="bg-navy text-white">
+            {['Bodega', 'Producto', 'Tonelaje (MT)'].map((h) => <th key={h} className="px-3 py-2.5 text-left font-lexend font-semibold">{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {stowage.bodegas.map((b, i) => (
+              <tr key={i} className="border-b border-gray-100">
+                <td className="px-3 py-2 font-semibold text-navy font-lexend text-xs">{b.numero}</td>
+                <td className="px-2 py-1.5"><input value={b.producto} onChange={(e) => act(`bodegas.${i}.producto`, e.target.value)} placeholder={i % 2 === 1 ? 'EMPTY' : 'PIG IRON IN BULK'} className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs" /></td>
+                <td className="px-2 py-1.5"><input value={b.tonelaje} onChange={(e) => act(`bodegas.${i}.tonelaje`, e.target.value)} placeholder="0.000" className="w-[120px] px-2 py-1.5 border border-gray-200 rounded-md text-xs text-right" /></td>
+              </tr>
+            ))}
+            <tr className="bg-accent-light font-bold">
+              <td className="px-3 py-2.5 text-accent font-lexend">TOTALES</td><td />
+              <td className="px-3 py-2.5 text-accent font-lexend text-right">{formatearTonelaje(total)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div className="mt-3 flex gap-2">
+          <Boton variante="secundario" icono={<Plus size={16} />} onClick={() => setStowage((p) => ({ ...p, bodegas: [...p.bodegas, { numero: `No ${String(p.bodegas.length + 1).padStart(2, '0')}`, producto: '', tonelaje: '0.000' }] }))}>Agregar bodega</Boton>
+          {stowage.bodegas.length > 1 && <Boton variante="fantasma" onClick={() => setStowage((p) => ({ ...p, bodegas: p.bodegas.slice(0, -1) }))}>Quitar última</Boton>}
+        </div>
+      </Tarjeta>
+      <Tarjeta titulo="Observaciones" subtitulo="Descripción detallada de la operación" icono={<List size={22} />}>
+        <textarea value={stowage.observaciones} onChange={(e) => setStowage((p) => ({ ...p, observaciones: e.target.value }))} placeholder="EL BUQUE ARRIBO EL DIA 13 DE ENERO DE 2026 A LAS 06:25 HRS..."
+          className="w-full px-3.5 py-2.5 border-[1.5px] border-gray-200 rounded-lg text-sm font-source text-navy bg-white resize-y min-h-[200px] placeholder:text-gray-300" />
+      </Tarjeta>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PASO 4: FOTOS (EL PASO CLAVE)
+// ═══════════════════════════════════════════════════════════════════
+
+function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas }) {
+  const inputRef = useRef(null)
+  const inputPortadaRef = useRef(null)
+  const [bodegaSel, setBodegaSel] = useState(null)
+  const [arrastrado, setArrastrado] = useState(null)
+  const [sobre, setSobre] = useState(null)
+
+  const categorias = useMemo(() => {
+    const cats = []
+    for (let i = 1; i <= numBodegas; i++) cats.push({ tipo: 'bodega', numero: i, clave: `bodega-${i}`, etiqueta: `Bodega ${i}` })
+    SECCIONES_EXTRA.forEach((s) => cats.push({ tipo: 'seccion', nombre: s, clave: `seccion-${s}`, etiqueta: s }))
+    return cats
+  }, [numBodegas])
+
+  const fotosPorCat = useMemo(() => {
+    const m = {}; categorias.forEach((c) => { m[c.clave] = [] })
+    fotos.forEach((f) => { if (m[f.categoriaKey]) m[f.categoriaKey].push(f) })
+    return m
+  }, [fotos, categorias])
+
+  const claveDefault = () => {
+    if (bodegaSel !== null && categorias[bodegaSel]) return categorias[bodegaSel].clave
+    return 'bodega-1'
+  }
+
+  const procesarArchivos = async (archivos) => {
+    const nuevas = []
+    for (const a of archivos) {
+      if (!a.type.startsWith('image/')) continue
+      nuevas.push({ id: uid(), archivo: a, dataUrl: await leerComoDataURL(a), categoriaKey: claveDefault(), nombre: a.name })
+    }
+    setFotos((p) => [...p, ...nuevas])
+  }
+
+  const procesarPortada = async (archivos) => {
+    const nuevas = []
+    for (const a of archivos) {
+      if (!a.type.startsWith('image/')) continue
+      nuevas.push({ id: uid(), archivo: a, dataUrl: await leerComoDataURL(a), nombre: a.name })
+    }
+    setFotosPortada((p) => [...p, ...nuevas].slice(0, 2))
+  }
+
+  const manejarDrop = (e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('zona-drop-activa'); procesarArchivos(Array.from(e.dataTransfer.files)) }
+  const manejarDragOver = (e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('zona-drop-activa') }
+  const manejarDragLeave = (e) => { e.currentTarget.classList.remove('zona-drop-activa') }
+
+  const finalizarArrastre = () => {
+    if (arrastrado && sobre) {
+      setFotos((p) => { const a = [...p]; const d = a.findIndex((f) => f.id === arrastrado); const h = a.findIndex((f) => f.id === sobre); if (d < 0 || h < 0) return p; const [item] = a.splice(d, 1); a.splice(h, 0, item); return a })
+    }
+    setArrastrado(null); setSobre(null)
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Portada */}
+      <Tarjeta titulo="Fotos de Portada" subtitulo="2 fotos del buque para la primera página" icono={<Ship size={22} />}>
+        <div className="flex gap-4 flex-wrap items-center">
+          {fotosPortada.map((f, i) => (
+            <div key={f.id} className="relative rounded-xl overflow-hidden border-2 border-gray-200">
+              <img src={f.dataUrl} alt={`Portada ${i + 1}`} className="w-60 h-[150px] object-cover" />
+              <div className="absolute top-1.5 left-1.5 bg-accent text-white px-2 py-0.5 rounded-md text-[11px] font-bold font-lexend">Portada {i + 1}</div>
+              <button onClick={() => setFotosPortada((p) => p.filter((_, j) => j !== i))} className="absolute top-1.5 right-1.5 bg-black/60 text-white border-none rounded-md w-[26px] h-[26px] cursor-pointer flex items-center justify-center text-sm hover:bg-black/80">×</button>
+            </div>
+          ))}
+          {fotosPortada.length < 2 && (
+            <label className="w-60 h-[150px] border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer text-gray-400 gap-2 hover:border-accent hover:text-accent transition-colors">
+              <Upload size={28} /><span className="text-[13px] font-lexend">Subir foto del buque</span>
+              <input ref={inputPortadaRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => procesarPortada(Array.from(e.target.files))} />
+            </label>
+          )}
+        </div>
+      </Tarjeta>
+
+      {/* Bodegas */}
+      <Tarjeta titulo="Fotos de Bodegas y Secciones" subtitulo={`${fotos.length} fotos · Arrastra para reordenar`} icono={<Camera size={22} />}>
+        {/* Drop zone */}
+        <div onDrop={manejarDrop} onDragOver={manejarDragOver} onDragLeave={manejarDragLeave} onClick={() => inputRef.current?.click()}
+          className="border-2 border-dashed border-gray-300 rounded-xl px-6 py-8 text-center mb-5 bg-gray-50 cursor-pointer transition-all hover:border-accent/50">
+          <Upload size={36} className="mx-auto text-gray-400" />
+          <p className="mt-3 mb-1 text-[15px] font-semibold text-navy font-lexend">Arrastra fotos aquí o haz clic para seleccionar</p>
+          <p className="m-0 text-[13px] text-gray-400">Se asignarán a <strong className="text-accent">{bodegaSel !== null ? categorias[bodegaSel]?.etiqueta : 'Bodega 1'}</strong></p>
+          <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => procesarArchivos(Array.from(e.target.files))} />
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-5 flex-wrap">
+          <Boton variante={bodegaSel === null ? 'primario' : 'secundario'} className="!px-3.5 !py-1.5 !text-xs" onClick={() => setBodegaSel(null)}>Todas ({fotos.length})</Boton>
+          {categorias.map((c, idx) => (
+            <Boton key={c.clave} variante={bodegaSel === idx ? 'primario' : 'secundario'} className="!px-3.5 !py-1.5 !text-xs" onClick={() => setBodegaSel(idx)}>
+              {c.etiqueta} ({fotosPorCat[c.clave]?.length || 0})
+            </Boton>
+          ))}
+        </div>
+
+        {/* Grid */}
+        {(bodegaSel === null ? categorias : [categorias[bodegaSel]]).filter(Boolean).map((cat) => {
+          const grupo = fotosPorCat[cat.clave] || []
+          if (grupo.length === 0 && bodegaSel !== null) return (
+            <div key={cat.clave} className="py-10 text-center text-gray-400">
+              <Camera size={40} className="mx-auto text-gray-300 mb-3" />
+              <p className="font-lexend text-sm">No hay fotos para {cat.etiqueta}</p>
+            </div>
+          )
+          if (grupo.length === 0) return null
+          return (
+            <div key={cat.clave} className="mb-6">
+              <h4 className="font-lexend text-sm font-bold text-accent m-0 mb-3 pb-2 border-b-2 border-accent-light">{cat.etiqueta.toUpperCase()} — {grupo.length} fotos</h4>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+                {grupo.map((foto) => (
+                  <div key={foto.id} draggable onDragStart={() => setArrastrado(foto.id)} onDragOver={(e) => { e.preventDefault(); if (arrastrado) setSobre(foto.id) }} onDragEnd={finalizarArrastre}
+                    className={`relative rounded-xl overflow-hidden cursor-grab transition-all ${sobre === foto.id ? 'border-2 border-accent' : 'border-2 border-gray-200'} ${arrastrado === foto.id ? 'opacity-50' : ''}`}>
+                    <img src={foto.dataUrl} alt={foto.nombre} className="w-full h-[120px] object-cover block" />
+                    <div className="px-2 py-1.5 bg-white flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1">
+                        <GripVertical size={14} className="text-gray-300" />
+                        <select value={foto.categoriaKey} onChange={(e) => setFotos((p) => p.map((f) => f.id === foto.id ? { ...f, categoriaKey: e.target.value } : f))}
+                          className="border-none text-[11px] font-semibold text-accent bg-transparent cursor-pointer font-lexend">
+                          {categorias.map((c) => <option key={c.clave} value={c.clave}>{c.etiqueta}</option>)}
+                        </select>
+                      </div>
+                      <button onClick={() => setFotos((p) => p.filter((f) => f.id !== foto.id))} className="bg-transparent border-none cursor-pointer p-0.5"><Trash2 size={14} className="text-red-500" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </Tarjeta>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PASO 5: STATEMENTS OF FACTS
+// ═══════════════════════════════════════════════════════════════════
+
+function PasoSOF({ sof, setSOF }) {
+  const act = (ruta, val) => setSOF((p) => actualizarProfundo(p, ruta, val))
+  return (
+    <Tarjeta titulo="Statements of Facts" subtitulo="Bitácora día por día de la operación" icono={<Clock size={22} />}>
+      {sof.entradas.map((entrada, ei) => (
+        <div key={ei} className={`mb-5 p-4 border border-gray-200 rounded-xl ${ei % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+          <div className="flex gap-3 mb-3 items-end">
+            <Entrada etiqueta="Fecha" value={entrada.fecha} onChange={(e) => act(`entradas.${ei}.fecha`, e.target.value)} placeholder="JANUARY 18TH 2026" className="flex-1" />
+            <Entrada etiqueta="Día" value={entrada.diaSemana} onChange={(e) => act(`entradas.${ei}.diaSemana`, e.target.value)} placeholder="SUNDAY" className="!w-[160px]" />
+            <Boton variante="peligro" className="!px-3 !py-2" onClick={() => setSOF((p) => ({ entradas: p.entradas.filter((_, j) => j !== ei) }))}><Trash2 size={14} /></Boton>
+          </div>
+          {entrada.lineas.map((linea, li) => (
+            <div key={li} className="grid grid-cols-[100px_100px_1fr_32px] gap-2 mb-1.5 items-center">
+              <input value={linea.horaInicio} onChange={(e) => act(`entradas.${ei}.lineas.${li}.horaInicio`, e.target.value)} placeholder="00:01" className="px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+              <input value={linea.horaFin} onChange={(e) => act(`entradas.${ei}.lineas.${li}.horaFin`, e.target.value)} placeholder="05:30" className="px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+              <input value={linea.actividad} onChange={(e) => act(`entradas.${ei}.lineas.${li}.actividad`, e.target.value)} placeholder="DISCHARGING WITH THREE GANGS..." className="px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+              <button onClick={() => { setSOF((p) => { const c = JSON.parse(JSON.stringify(p)); c.entradas[ei].lineas = c.entradas[ei].lineas.filter((_, j) => j !== li); return c }) }} className="bg-transparent border-none cursor-pointer p-1"><Trash2 size={13} className="text-red-500" /></button>
+            </div>
+          ))}
+          <Boton variante="fantasma" className="!px-2.5 !py-1 !text-xs mt-1" icono={<Plus size={14} />} onClick={() => { setSOF((p) => { const c = JSON.parse(JSON.stringify(p)); c.entradas[ei].lineas.push({ horaInicio: '', horaFin: '', actividad: '' }); return c }) }}>Agregar línea</Boton>
+        </div>
+      ))}
+      <Boton variante="secundario" icono={<Plus size={16} />} onClick={() => setSOF((p) => ({ entradas: [...p.entradas, { fecha: '', diaSemana: '', lineas: [{ horaInicio: '', horaFin: '', actividad: '' }] }] }))}>Agregar día</Boton>
+    </Tarjeta>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PASO 6: GENERAR REPORTE
+// ═══════════════════════════════════════════════════════════════════
+
+function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, sof, generando, onGenerar }) {
+  const nombre = `REPORTE_${config.puerto}_${config.consecutivo}-${config.anio}_MV_${(config.buque || 'BUQUE').replace(/\s+/g, '_')}__${config.viaje}_${config.puerto}_IMP.docx`
+  const pags = 3 + Math.ceil(fotos.length / 2) + (sof.entradas.some((e) => e.fecha) ? 1 : 0) + 1
+  const Chk = ({ ok, t }) => (
+    <div className="flex items-center gap-2"><div className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${ok ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'}`}>{ok ? '✓' : '—'}</div><span className={ok ? 'text-navy' : 'text-gray-400'}>{t}</span></div>
+  )
+  return (
+    <div className="flex flex-col gap-6">
+      <Tarjeta titulo="Resumen del Reporte" icono={<Eye size={22} />}>
+        <div className="grid grid-cols-2 gap-4 mb-5">
+          {[
+            ['Código', `${config.puerto}-LP-${config.consecutivo}-${config.anio}`],
+            ['Buque', `MV ${config.buque || '—'} ${config.viaje}`],
+            ['Cliente', 'DEACERO SAPI DE CV'],
+            ['Fotos', `${fotosPortada.length} portada + ${fotos.length} bodegas`],
+          ].map(([l, v]) => (
+            <div key={l} className="p-4 bg-gray-50 rounded-xl">
+              <p className="text-xs text-gray-400 m-0 mb-1 font-lexend uppercase">{l}</p>
+              <p className="text-base font-bold text-navy m-0 font-lexend">{v}</p>
+            </div>
+          ))}
+        </div>
+        <div className="p-4 bg-accent-light rounded-xl border border-accent/20 mb-5">
+          <p className="text-[13px] text-gray-700 m-0 mb-1"><strong>Archivo:</strong> {nombre}</p>
+          <p className="text-[13px] text-gray-700 m-0"><strong>Páginas estimadas:</strong> ~{pags}</p>
+        </div>
+        <div className="mb-5 p-4 bg-gray-50 rounded-xl">
+          <p className="text-xs font-semibold text-gray-500 font-lexend uppercase m-0 mb-3">Contenido incluido</p>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <Chk ok={fotosPortada.length === 2} t="2 fotos de portada" />
+            <Chk ok={!!config.buque} t="Nombre del buque" />
+            <Chk ok={operacion.eventos.some((e) => e.mes)} t="Fechas de operación" />
+            <Chk ok={stowage.bodegas.some((b) => parseFloat(b.tonelaje) > 0)} t="Stowage plan" />
+            <Chk ok={!!stowage.observaciones} t="Observaciones" />
+            <Chk ok={fotos.length > 0} t={`${fotos.length} fotos de bodegas`} />
+            <Chk ok={sof.entradas.some((e) => e.fecha)} t="Statements of Facts" />
+          </div>
+        </div>
+        <Boton onClick={onGenerar} deshabilitado={generando} icono={generando ? null : <Download size={18} />} className="!w-full !py-4 !text-base !rounded-xl">
+          {generando ? 'Generando documento...' : 'Generar Reporte .docx'}
+        </Boton>
+      </Tarjeta>
+      {fotos.length > 0 && (
+        <Tarjeta titulo="Preview de Fotos" subtitulo="Distribución de páginas" icono={<Camera size={22} />}>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2">
+            {Array.from({ length: Math.ceil(fotos.length / 2) }).map((_, pi) => {
+              const f1 = fotos[pi * 2], f2 = fotos[pi * 2 + 1]
+              return (
+                <div key={pi} className="border border-gray-200 rounded-lg p-1.5 bg-white" style={{ aspectRatio: '8.5/11' }}>
+                  <div className="h-1.5 bg-barra rounded-sm mb-1" />
+                  <div className="text-[5px] text-gray-400 text-center mb-0.5">Pág. {pi + 4}</div>
+                  {f1 && <div className="relative mb-1"><img src={f1.dataUrl} className="w-full h-10 object-cover rounded-sm" /><span className="absolute bottom-0 left-0.5 text-[5px] text-accent font-bold bg-white/80 px-0.5 rounded-sm">{f1.categoriaKey.replace('bodega-', 'B').replace('seccion-', '')}</span></div>}
+                  {f2 && <div className="relative"><img src={f2.dataUrl} className="w-full h-10 object-cover rounded-sm" /><span className="absolute bottom-0 left-0.5 text-[5px] text-accent font-bold bg-white/80 px-0.5 rounded-sm">{f2.categoriaKey.replace('bodega-', 'B').replace('seccion-', '')}</span></div>}
+                </div>
+              )
+            })}
+          </div>
+        </Tarjeta>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// GENERACIÓN DEL .DOCX
+// ═══════════════════════════════════════════════════════════════════
+
+// Datos fijos de DEACERO
+const CLIENTE = {
+  nombre: 'DEACERO SAPI DE CV',
+  rfc: 'DEA7103086X2',
+  direccion: 'Av. Lázaro Cárdenas 2333, Col. Valle Oriente, San Pedro Garza Garcia, Nuevo Leon. CP 66269',
+  telefono: '01 800 021 33 22',
+}
+
+// Función para cargar el logo DEACERO desde public/
+const cargarLogoDeacero = async () => {
+  const resp = await fetch('/logo-deacero.png')
+  const buf = await resp.arrayBuffer()
+  return new Uint8Array(buf)
+}
+
+async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, sof }) {
+  const {
+    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun,
+    Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, PageBreak, VerticalAlign,
+  } = await import('docx')
+
+  // ─── Utilidades internas ───
+  const borde = { style: BorderStyle.SINGLE, size: 1, color: '000000' }
+  const bordes = { top: borde, bottom: borde, left: borde, right: borde }
+
+  const celda = (texto, opts = {}) => new TableCell({
+    borders: bordes,
+    width: opts.ancho ? { size: opts.ancho, type: WidthType.DXA } : undefined,
+    shading: opts.fondo ? { fill: opts.fondo, type: ShadingType.CLEAR } : undefined,
+    verticalAlign: VerticalAlign.CENTER,
+    margins: { top: 40, bottom: 40, left: 80, right: 80 },
+    children: [new Paragraph({
+      alignment: opts.alineacion || AlignmentType.LEFT,
+      children: [new TextRun({ text: texto || '', bold: opts.negrita, size: opts.tamano || 20, font: 'Arial', color: opts.color || '000000' })],
+    })],
+  })
+
+  // ─── Barra naranja ───
+  const canvas = document.createElement('canvas'); canvas.width = 349; canvas.height = 13
+  const ctx = canvas.getContext('2d'); ctx.fillStyle = '#FF6600'; ctx.fillRect(0, 0, 349, 13)
+  const barraUrl = canvas.toDataURL('image/png')
+  const barraBin = atob(barraUrl.split(',')[1])
+  const barraDatos = new Uint8Array(barraBin.length); for (let i = 0; i < barraBin.length; i++) barraDatos[i] = barraBin.charCodeAt(i)
+
+  // ─── Logo DEACERO ───
+  const logoDatos = await cargarLogoDeacero()
+
+  const codigoHeader = `${config.puerto}-LP-${config.consecutivo}-${config.anio}  MV ${config.buque}   ${config.viaje} VCZ`
+
+  // ─── Header (fijo salvo código de operación) ───
+  const hijosHeader = [
+    new Paragraph({ children: [new ImageRun({ type: 'png', data: barraDatos, transformation: { width: 286, height: 14 }, altText: { title: 'Barra', description: 'Barra naranja', name: 'barra' } })] }),
+    new Paragraph({ spacing: { after: 0, line: 240 }, children: [new TextRun({ text: 'REPORTE DE OPERACIÓN  PUERTOS MEXICO / USA', bold: true, size: 28, color: '000000' })] }),
+    new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0 }, children: [new ImageRun({ type: 'png', data: logoDatos, transformation: { width: 120, height: 36 }, altText: { title: 'Logo', description: 'Logo DEACERO', name: 'logo' } })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 240 }, children: [new TextRun({ text: codigoHeader, bold: true, size: 24, font: 'Arial', color: '000000' })] }),
+  ]
+
+  // ─── Footer ───
+  const parrafoFooter = (texto) => new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 240 }, children: [new TextRun({ text: texto, color: '000000', size: 20 })] })
+
+  const seccion = {
+    page: { size: { width: DOC.anchoHoja, height: DOC.altoHoja }, margin: { top: DOC.margenTop, right: DOC.margenRight, bottom: DOC.margenBottom, left: DOC.margenLeft, header: DOC.header, footer: DOC.footer, gutter: 0 } },
+  }
+
+  // ═══ PORTADA ═══
+  const portada = [new Paragraph({ children: [] })]
+  for (const fp of fotosPortada) {
+    const dims = await obtenerDimensiones(fp.archivo)
+    const anchoPt = 442
+    const altoPt = Math.round((dims.alto / dims.ancho) * anchoPt)
+    portada.push(
+      new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(fp.archivo), transformation: { width: anchoPt, height: altoPt }, altText: { title: 'Portada', description: 'Buque', name: 'portada' } })] }),
+      new Paragraph({ children: [] })
+    )
+  }
+  portada.push(new Paragraph({ children: [new PageBreak()] }))
+
+  // ═══ PÁGINA 2: OPERACIÓN ═══
+  // Tabla de eventos (2 columnas como el original)
+  const filasEventos = operacion.eventos.map((ev) =>
+    new TableRow({ children: [
+      celda(ev.nombre, { ancho: TABLA_EVENTOS.cols[0], negrita: true }),
+      celda(`${ev.mes}                  ${ev.dia},  ${ev.anio}       ${ev.hora}`, { ancho: TABLA_EVENTOS.cols[1] }),
+    ] })
+  )
+  filasEventos.push(new TableRow({ children: [
+    celda('CARGA TOTAL', { ancho: TABLA_EVENTOS.cols[0], negrita: true }),
+    celda(`                            ${operacion.cargaTotal}`, { ancho: TABLA_EVENTOS.cols[1], negrita: true }),
+  ] }))
+
+  const tablaEventos = new Table({ width: { size: TABLA_EVENTOS.total, type: WidthType.DXA }, columnWidths: TABLA_EVENTOS.cols, rows: filasEventos })
+
+  // Subtítulo cantidades
+  const tituloSeccion = (texto) => new Paragraph({ spacing: { before: 200, after: 100 }, children: [new TextRun({ text: texto, bold: true, size: 24, font: 'Arial' })] })
+
+  // Tabla cantidades
+  const filasCant = [
+    new TableRow({ children: [celda('DESCRIPCION DEL PRODUCTO', { ancho: TABLA_CANTIDADES.cols[0], negrita: true }), celda('TIPO', { ancho: TABLA_CANTIDADES.cols[1], negrita: true }), celda('PIEZA', { ancho: TABLA_CANTIDADES.cols[2], negrita: true }), celda('TONELAJE (MT)', { ancho: TABLA_CANTIDADES.cols[3], negrita: true })] }),
+    ...operacion.cantidades.map((c) => new TableRow({ children: [celda(c.descripcion, { ancho: TABLA_CANTIDADES.cols[0] }), celda(c.tipo, { ancho: TABLA_CANTIDADES.cols[1] }), celda(c.piezas, { ancho: TABLA_CANTIDADES.cols[2], alineacion: AlignmentType.CENTER }), celda(c.tonelaje, { ancho: TABLA_CANTIDADES.cols[3], alineacion: AlignmentType.RIGHT })] })),
+    new TableRow({ children: [celda('TOTAL', { ancho: TABLA_CANTIDADES.cols[0], negrita: true }), celda('', { ancho: TABLA_CANTIDADES.cols[1] }), celda(String(operacion.cantidades.reduce((s, c) => s + (parseInt(c.piezas) || 0), 0)), { ancho: TABLA_CANTIDADES.cols[2], alineacion: AlignmentType.CENTER }), celda(formatearTonelaje(operacion.cantidades.reduce((s, c) => s + (parseFloat(c.tonelaje) || 0), 0)), { ancho: TABLA_CANTIDADES.cols[3], alineacion: AlignmentType.RIGHT, negrita: true })] }),
+  ]
+  const tablaCant = new Table({ width: { size: TABLA_CANTIDADES.total, type: WidthType.DXA }, columnWidths: TABLA_CANTIDADES.cols, rows: filasCant })
+
+  // Tabla BL
+  const filasBL = [
+    new TableRow({ children: [celda('NUMERO DE BL', { ancho: TABLA_BL.cols[0], negrita: true }), celda('PUERTO', { ancho: TABLA_BL.cols[1], negrita: true }), celda('PIEZAS', { ancho: TABLA_BL.cols[2], negrita: true }), celda('TONELAJE (MT)', { ancho: TABLA_BL.cols[3], negrita: true })] }),
+    ...operacion.bls.map((bl) => new TableRow({ children: [celda(bl.numero, { ancho: TABLA_BL.cols[0] }), celda(bl.puerto, { ancho: TABLA_BL.cols[1] }), celda(bl.piezas, { ancho: TABLA_BL.cols[2], alineacion: AlignmentType.CENTER }), celda(bl.tonelaje, { ancho: TABLA_BL.cols[3], alineacion: AlignmentType.RIGHT })] })),
+    new TableRow({ children: [celda('TOTALES', { ancho: TABLA_BL.cols[0], negrita: true }), celda('', { ancho: TABLA_BL.cols[1] }), celda(String(operacion.bls.reduce((s, b) => s + (parseInt(b.piezas) || 0), 0)), { ancho: TABLA_BL.cols[2], alineacion: AlignmentType.CENTER }), celda(formatearTonelaje(operacion.bls.reduce((s, b) => s + (parseFloat(b.tonelaje) || 0), 0)), { ancho: TABLA_BL.cols[3], alineacion: AlignmentType.RIGHT, negrita: true })] }),
+  ]
+  const tablaBL = new Table({ width: { size: TABLA_BL.total, type: WidthType.DXA }, columnWidths: TABLA_BL.cols, rows: filasBL })
+
+  const pag2 = [
+    tablaEventos,
+    tituloSeccion('CANTIDADES RECIBIDAS'),
+    new Paragraph({ children: [new TextRun({ text: CLIENTE.nombre, bold: true, size: 20, font: 'Arial' })] }),
+    tablaCant,
+    tituloSeccion('GRAN TOTAL'),
+    tablaBL,
+    new Paragraph({ children: [new PageBreak()] }),
+  ]
+
+  // ═══ PÁGINA 3: STOWAGE + OBSERVACIONES ═══
+  const filasStow = [
+    new TableRow({ children: [celda('BODEGA', { ancho: TABLA_STOWAGE.cols[0], negrita: true, alineacion: AlignmentType.CENTER }), celda('PRODUCTO', { ancho: TABLA_STOWAGE.cols[1], negrita: true, alineacion: AlignmentType.CENTER }), celda('TONELAJE (MT)', { ancho: TABLA_STOWAGE.cols[2], negrita: true, alineacion: AlignmentType.CENTER })] }),
+    ...stowage.bodegas.map((b) => new TableRow({ children: [celda(b.numero, { ancho: TABLA_STOWAGE.cols[0], alineacion: AlignmentType.CENTER }), celda(b.producto, { ancho: TABLA_STOWAGE.cols[1], alineacion: AlignmentType.CENTER }), celda(b.tonelaje, { ancho: TABLA_STOWAGE.cols[2], alineacion: AlignmentType.CENTER })] })),
+    new TableRow({ children: [celda('TOTALES', { ancho: TABLA_STOWAGE.cols[0], negrita: true, alineacion: AlignmentType.CENTER }), celda('', { ancho: TABLA_STOWAGE.cols[1] }), celda(formatearTonelaje(stowage.bodegas.reduce((s, b) => s + (parseFloat(b.tonelaje) || 0), 0)), { ancho: TABLA_STOWAGE.cols[2], negrita: true, alineacion: AlignmentType.CENTER })] }),
+  ]
+  const tablaStow = new Table({ width: { size: TABLA_STOWAGE.total, type: WidthType.DXA }, columnWidths: TABLA_STOWAGE.cols, rows: filasStow })
+
+  const obsParrs = stowage.observaciones
+    ? stowage.observaciones.split(/\n+/).map((l) => new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: l, size: 18, font: 'Arial' })] }))
+    : [new Paragraph({ children: [] })]
+
+  const pag3 = [
+    tituloSeccion('STOWAGE PLAN'),
+    tablaStow,
+    new Paragraph({ spacing: { before: 300 }, children: [new TextRun({ text: 'OBSERVACIONES:', bold: true, size: 24, font: 'Arial' })] }),
+    ...obsParrs,
+    new Paragraph({ children: [new PageBreak()] }),
+  ]
+
+  // ═══ PÁGINAS 4+: FOTOS ═══
+  const pagsFotos = []
+  // Ordenar por categoría manteniendo orden del usuario
+  const ordenCats = [...new Set(fotos.map((f) => f.categoriaKey))]
+  const fotosOrdenadas = []
+  for (const clave of ordenCats) {
+    fotosOrdenadas.push(...fotos.filter((f) => f.categoriaKey === clave))
+  }
+
+  let catActual = null
+  for (let i = 0; i < fotosOrdenadas.length; i += 2) {
+    const f1 = fotosOrdenadas[i], f2 = fotosOrdenadas[i + 1]
+    const pagina = []
+
+    // Título de sección si cambió
+    if (f1.categoriaKey !== catActual) {
+      catActual = f1.categoriaKey
+      const etiqueta = catActual.startsWith('bodega-')
+        ? `BODEGA No ${catActual.replace('bodega-', '').padStart(2, '0')}`
+        : catActual.replace('seccion-', '')
+      pagina.push(new Paragraph({
+        alignment: AlignmentType.CENTER, spacing: { before: 100, after: 100 },
+        children: [new TextRun({ text: etiqueta, bold: true, size: 28, font: 'Arial' })],
+      }))
+    }
+
+    // Foto 1
+    const dims1 = await obtenerDimensiones(f1.archivo)
+    const alto1Pt = Math.round((dims1.alto / dims1.ancho) * 442)
+    pagina.push(
+      new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f1.archivo), transformation: { width: 442, height: Math.min(alto1Pt, 270) }, altText: { title: 'Foto', description: 'Operación', name: `foto${i}` } })] }),
+    )
+
+    // Foto 2
+    if (f2) {
+      if (f2.categoriaKey !== catActual) {
+        catActual = f2.categoriaKey
+        const etiqueta2 = catActual.startsWith('bodega-')
+          ? `BODEGA No ${catActual.replace('bodega-', '').padStart(2, '0')}`
+          : catActual.replace('seccion-', '')
+        pagina.push(new Paragraph({
+          alignment: AlignmentType.CENTER, spacing: { before: 100, after: 50 },
+          children: [new TextRun({ text: etiqueta2, bold: true, size: 28, font: 'Arial' })],
+        }))
+      }
+      const dims2 = await obtenerDimensiones(f2.archivo)
+      const alto2Pt = Math.round((dims2.alto / dims2.ancho) * 442)
+      pagina.push(
+        new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f2.archivo), transformation: { width: 442, height: Math.min(alto2Pt, 270) }, altText: { title: 'Foto', description: 'Operación', name: `foto${i + 1}` } })] }),
+      )
+    }
+    pagina.push(new Paragraph({ children: [new PageBreak()] }))
+    pagsFotos.push(...pagina)
+  }
+
+  // ═══ SOF ═══
+  const pagsSOF = []
+  if (sof.entradas.some((e) => e.fecha)) {
+    pagsSOF.push(
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new TextRun({ text: 'STATEMENTS OF FACTS', bold: true, size: 28, font: 'Arial' })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 300 }, children: [new TextRun({ text: `M.V ${config.buque} ${config.viaje}`, bold: true, size: 24, font: 'Arial' })] }),
+    )
+    for (const ent of sof.entradas) {
+      if (!ent.fecha) continue
+      pagsSOF.push(
+        new Paragraph({ spacing: { before: 200, after: 0 }, children: [new TextRun({ text: ent.fecha, bold: true, size: 22, font: 'Arial' })] }),
+        new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: ent.diaSemana, bold: true, size: 20, font: 'Arial' })] }),
+      )
+      for (const lin of ent.lineas) {
+        if (!lin.actividad) continue
+        pagsSOF.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: `${lin.horaInicio}-${lin.horaFin} ${lin.actividad}`, size: 20, font: 'Arial' })] }))
+      }
+    }
+  }
+
+  // ═══ CONSTRUIR DOCUMENTO ═══
+  const doc = new Document({
+    styles: { default: { document: { run: { font: 'Arial', size: 22 } } } },
+    sections: [{
+      properties: seccion,
+      headers: { default: new Header({ children: hijosHeader }) },
+      footers: { default: new Footer({ children: [
+        parrafoFooter(`${CLIENTE.nombre} ${CLIENTE.rfc}`),
+        parrafoFooter(CLIENTE.direccion),
+        parrafoFooter(`Tel. ${CLIENTE.telefono}`),
+      ] }) },
+      children: [...portada, ...pag2, ...pag3, ...pagsFotos, ...pagsSOF, new Paragraph({ children: [] })],
+    }],
+  })
+
+  const blob = await Packer.toBlob(doc)
+  const nombre = `REPORTE_${config.puerto}_${config.consecutivo}-${config.anio}_MV_${(config.buque || 'BUQUE').replace(/\s+/g, '_')}__${config.viaje}_${config.puerto}_IMP.docx`
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = nombre
+  link.click()
+  URL.revokeObjectURL(link.href)
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// APP PRINCIPAL
+// ═══════════════════════════════════════════════════════════════════
+
+export default function App() {
+  const [paso, setPaso] = useState(0)
+  const [config, setConfig] = useState(configInicial())
+  const [operacion, setOperacion] = useState(operacionInicial())
+  const [stowage, setStowage] = useState(stowageInicial())
+  const [fotos, setFotos] = useState([])
+  const [fotosPortada, setFotosPortada] = useState([])
+  const [sof, setSOF] = useState(sofInicial())
+  const [generando, setGenerando] = useState(false)
+
+  const manejarGenerar = async () => {
+    setGenerando(true)
+    try {
+      await generarDocx({ config, operacion, stowage, fotos, fotosPortada, sof })
+    } catch (err) {
+      console.error(err)
+      alert('Error al generar: ' + err.message)
+    } finally {
+      setGenerando(false)
+    }
+  }
+
+  return (
+    <div className="font-source bg-gradient-to-br from-gray-50 to-slate-100 min-h-screen text-navy">
+      {/* Barra superior */}
+      <div className="bg-navy px-8 py-4 flex items-center justify-between shadow-lg">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
+            <Ship size={22} className="text-white" />
+          </div>
+          <div>
+            <h1 className="m-0 text-lg font-bold text-white font-lexend tracking-tight">SMP Reportes</h1>
+            <p className="m-0 text-[11px] text-white/40 font-lexend">Generador de Reportes de Operación</p>
+          </div>
+        </div>
+        <div className="text-xs text-white/30 font-lexend">Naviera SMP, S.A. de C.V.</div>
+      </div>
+
+      {/* Navegación */}
+      <div className="bg-white border-b border-gray-100 px-8 flex gap-0 overflow-x-auto">
+        {PASOS.map((p, i) => {
+          const activo = paso === i, completo = paso > i
+          const Ic = p.icono
+          return (
+            <button key={p.clave} onClick={() => setPaso(i)}
+              className={`flex items-center gap-2 px-5 py-3.5 bg-transparent cursor-pointer transition-all border-0 border-b-[3px] ${activo ? 'border-b-accent opacity-100' : 'border-b-transparent opacity-50 hover:opacity-75'}`}>
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-lexend ${activo ? 'bg-accent text-white' : completo ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                {completo ? <Check size={14} /> : i + 1}
+              </div>
+              <span className={`text-[13px] whitespace-nowrap font-lexend ${activo ? 'font-bold text-navy' : 'font-medium text-gray-500'}`}>{p.corta}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Contenido */}
+      <div className="max-w-[960px] mx-auto px-6 pt-7 pb-16">
+        <div className="mb-5">
+          <h2 className="m-0 mb-1 text-[22px] font-bold font-lexend text-navy">{PASOS[paso].etiqueta}</h2>
+          <p className="m-0 text-[13px] text-gray-400">Paso {paso + 1} de {PASOS.length}</p>
+        </div>
+
+        {paso === 0 && <PasoConfig config={config} setConfig={setConfig} />}
+        {paso === 1 && <PasoOperacion operacion={operacion} setOperacion={setOperacion} />}
+        {paso === 2 && <PasoStowage stowage={stowage} setStowage={setStowage} />}
+        {paso === 3 && <PasoFotos fotos={fotos} setFotos={setFotos} fotosPortada={fotosPortada} setFotosPortada={setFotosPortada} numBodegas={stowage.bodegas.length} />}
+        {paso === 4 && <PasoSOF sof={sof} setSOF={setSOF} />}
+        {paso === 5 && <PasoGenerar config={config} operacion={operacion} stowage={stowage} fotos={fotos} fotosPortada={fotosPortada} sof={sof} generando={generando} onGenerar={manejarGenerar} />}
+
+        {/* Navegación inferior */}
+        <div className="flex justify-between mt-8 pt-5 border-t border-gray-100">
+          <Boton variante="secundario" icono={<ChevronLeft size={16} />} onClick={() => setPaso(Math.max(0, paso - 1))} deshabilitado={paso === 0}>Anterior</Boton>
+          {paso < PASOS.length - 1 && <Boton icono={<ChevronRight size={16} />} onClick={() => setPaso(Math.min(PASOS.length - 1, paso + 1))}>Siguiente</Boton>}
+        </div>
+      </div>
+    </div>
+  )
+}
