@@ -11,7 +11,7 @@ El archivo de referencia que define el formato exacto es:
 
 ## Stack
 
-- **React 18** (app de una sola página, 6 pasos tipo wizard)
+- **React 18** (app de una sola página, 5 pasos tipo wizard)
 - **Vite** para desarrollo y build
 - **Tailwind CSS 3** para estilos
 - **docx** (npm, v9+) para generar el body del .docx en el navegador
@@ -85,7 +85,6 @@ src/
 │   ├── PasoOperacion.jsx
 │   ├── PasoStowage.jsx
 │   ├── PasoFotos.jsx
-│   ├── PasoSOF.jsx
 │   └── PasoGenerar.jsx
 ├── generador/           ← Lógica de generación del .docx
 │   └── generarDocx.js
@@ -95,7 +94,7 @@ src/
 
 ---
 
-## Los 6 pasos de la app
+## Los 5 pasos de la app
 
 ### Paso 1 — Configuración
 - Puerto (select: VER, ALT, LZC, MZT, MNZ, HOU, NOL)
@@ -128,12 +127,7 @@ src/
   - Cambiar bodega con selector dropdown en cada foto
   - Preview en miniatura de cómo quedarán las páginas (2 fotos por página)
 
-### Paso 5 — Statements of Facts
-- Entradas por día: Fecha + Día de la semana
-- Cada día tiene líneas: Hora inicio, Hora fin, Actividad
-- Ejemplo: "00:01 - 05:30 DISCHARGING WITH THREE GANGS IN HOLDS 1, 3 & 5"
-
-### Paso 6 — Generar Reporte
+### Paso 5 — Generar Reporte
 - Resumen visual de todo el contenido
 - Checklist de completitud
 - Preview miniatura de las páginas de fotos
@@ -216,19 +210,10 @@ Cada página tiene:
 - Alto: proporcional al aspect ratio de la imagen original
 - Debajo de cada foto: label "Bodega X" en naranja bold
 
-Secciones adicionales después de las bodegas:
-- "DESCARGA DE BUQUE" — fotos de la descarga
-- "AREA DE ALMACENAMIENTO" — fotos del almacén
-- "DOCUMENTOS" — fotos de documentación
-
-### Páginas finales — Statements of Facts
-
-- Título centrado: "STATEMENTS OF FACTS"
-- Subtítulo: "M.V {BUQUE} {VIAJE}"
-- Por cada día:
-  - Fecha en bold (ej: "JANUARY 18TH 2026.")
-  - Día en bold (ej: "SUNDAY")
-  - Líneas: "HH:MM-HH:MM ACTIVIDAD"
+Secciones adicionales después de las bodegas (en este orden):
+1. "DESCARGA DE BUQUE" — fotos de la descarga
+2. "AREA DE ALMACENAMIENTO" — fotos del almacén
+3. "DOCUMENTOS" — fotos de documentación (incluye Statements of Facts como fotos escaneadas)
 
 ---
 
@@ -239,12 +224,14 @@ Secciones adicionales después de las bodegas:
 3. Tablas: siempre usar `WidthType.DXA`, nunca `WidthType.PERCENTAGE`
 4. Tablas: poner AMBOS `columnWidths` en la tabla Y `width` en cada celda
 5. Sombreado: usar `ShadingType.CLEAR`, nunca `SOLID`
-6. Imágenes: siempre especificar `type: 'jpg'` o `type: 'png'`
+6. Imágenes: siempre especificar `type: 'jpg'` o `type: 'png'`. La librería `docx` usa píxeles a 96 DPI en `transformation` (no puntos tipográficos a 72 DPI)
 7. Saltos de página: `new Paragraph({ children: [new PageBreak()] })`
 8. Nunca usar `\n` — usar `Paragraph` separados
 9. Font del documento: Calibri para todo el contenido del doc
 10. Fotos de bodega: ordenar por bodega (1, 2, 3...) manteniendo el orden del usuario dentro de cada bodega
-11. `Packer.toBlob()` para generar y descargar con file-saver o link temporal
+11. Secciones después de bodegas siempre en orden: DESCARGA DE BUQUE → AREA DE ALMACENAMIENTO → DOCUMENTOS
+12. Tamaños de fotos en el .docx (píxeles a 96 DPI): portada 590px ancho, bodegas 590px ancho (2 por página), documentos 545px ancho (1 por página)
+13. `Packer.toBlob()` para generar y descargar con file-saver o link temporal
 
 ---
 
@@ -267,7 +254,6 @@ Ejemplo: `REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
 - [ ] Comprimir fotos antes de insertar (reducir peso del .docx)
 - [ ] Calcular altura de imagen proporcionalmente al aspect ratio real
 - [ ] Exportar/importar datos del reporte como JSON
-- [ ] Añadir logo de NAVIERA DELREM en sección SOF
 - [ ] Validación de campos obligatorios antes de generar
 
 ---

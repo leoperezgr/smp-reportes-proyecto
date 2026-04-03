@@ -1,9 +1,13 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import {
-  Ship, Settings, Clock, Table2, Camera, List, Download, Upload,
+  Ship, Settings, Clock, Table2, Camera, Download, Upload,
   Trash2, GripVertical, Plus, Check, ChevronLeft, ChevronRight,
-  Eye, FileText,
+  Eye, FileText, Home, BarChart3, CheckCircle2, Loader2,
 } from 'lucide-react'
+import {
+  obtenerIndice, guardarIndice, guardarReporte, cargarReporte, eliminarReporte as eliminarReporteStorage,
+  guardarFotosReporte, cargarFotosReporte, eliminarFotosReporte, calcularProgreso,
+} from './almacenamiento'
 
 // ═══════════════════════════════════════════════════════════════════
 // CONSTANTES
@@ -46,7 +50,6 @@ const PASOS = [
   { clave: 'operacion', etiqueta: 'Datos de Operación', corta: 'Operación', icono: Clock },
   { clave: 'stowage', etiqueta: 'Stowage Plan', corta: 'Stowage', icono: Table2 },
   { clave: 'fotos', etiqueta: 'Fotos de Bodegas', corta: 'Fotos', icono: Camera },
-  { clave: 'sof', etiqueta: 'Statements of Facts', corta: 'SOF', icono: List },
   { clave: 'generar', etiqueta: 'Generar Reporte', corta: 'Generar', icono: Download },
 ]
 
@@ -130,9 +133,6 @@ const stowageInicial = () => ({
   observaciones: '',
 })
 
-const sofInicial = () => ({
-  entradas: [{ fecha: '', diaSemana: '', lineas: [{ horaInicio: '', horaFin: '', actividad: '' }] }],
-})
 
 // ═══════════════════════════════════════════════════════════════════
 // COMPONENTES DE UI
@@ -478,40 +478,13 @@ function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas 
 // PASO 5: STATEMENTS OF FACTS
 // ═══════════════════════════════════════════════════════════════════
 
-function PasoSOF({ sof, setSOF }) {
-  const act = (ruta, val) => setSOF((p) => actualizarProfundo(p, ruta, val))
-  return (
-    <Tarjeta titulo="Statements of Facts" subtitulo="Bitácora día por día de la operación" icono={<Clock size={22} />}>
-      {sof.entradas.map((entrada, ei) => (
-        <div key={ei} className={`mb-5 p-4 border border-gray-200 rounded-xl ${ei % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-          <div className="flex gap-3 mb-3 items-end">
-            <Entrada etiqueta="Fecha" value={entrada.fecha} onChange={(e) => act(`entradas.${ei}.fecha`, e.target.value)} placeholder="JANUARY 18TH 2026" className="flex-1" />
-            <Entrada etiqueta="Día" value={entrada.diaSemana} onChange={(e) => act(`entradas.${ei}.diaSemana`, e.target.value)} placeholder="SUNDAY" className="!w-[160px]" />
-            <Boton variante="peligro" className="!px-3 !py-2" onClick={() => setSOF((p) => ({ entradas: p.entradas.filter((_, j) => j !== ei) }))}><Trash2 size={14} /></Boton>
-          </div>
-          {entrada.lineas.map((linea, li) => (
-            <div key={li} className="grid grid-cols-[100px_100px_1fr_32px] gap-2 mb-1.5 items-center">
-              <input value={linea.horaInicio} onChange={(e) => act(`entradas.${ei}.lineas.${li}.horaInicio`, e.target.value)} placeholder="00:01" className="px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
-              <input value={linea.horaFin} onChange={(e) => act(`entradas.${ei}.lineas.${li}.horaFin`, e.target.value)} placeholder="05:30" className="px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
-              <input value={linea.actividad} onChange={(e) => act(`entradas.${ei}.lineas.${li}.actividad`, e.target.value)} placeholder="DISCHARGING WITH THREE GANGS..." className="px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
-              <button onClick={() => { setSOF((p) => { const c = JSON.parse(JSON.stringify(p)); c.entradas[ei].lineas = c.entradas[ei].lineas.filter((_, j) => j !== li); return c }) }} className="bg-transparent border-none cursor-pointer p-1"><Trash2 size={13} className="text-red-500" /></button>
-            </div>
-          ))}
-          <Boton variante="fantasma" className="!px-2.5 !py-1 !text-xs mt-1" icono={<Plus size={14} />} onClick={() => { setSOF((p) => { const c = JSON.parse(JSON.stringify(p)); c.entradas[ei].lineas.push({ horaInicio: '', horaFin: '', actividad: '' }); return c }) }}>Agregar línea</Boton>
-        </div>
-      ))}
-      <Boton variante="secundario" icono={<Plus size={16} />} onClick={() => setSOF((p) => ({ entradas: [...p.entradas, { fecha: '', diaSemana: '', lineas: [{ horaInicio: '', horaFin: '', actividad: '' }] }] }))}>Agregar día</Boton>
-    </Tarjeta>
-  )
-}
-
 // ═══════════════════════════════════════════════════════════════════
-// PASO 6: GENERAR REPORTE
+// PASO 5: GENERAR REPORTE
 // ═══════════════════════════════════════════════════════════════════
 
-function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, sof, generando, onGenerar }) {
+function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, generando, onGenerar }) {
   const nombre = `REPORTE_${config.puerto}_${config.consecutivo}-${config.anio}_MV_${(config.buque || 'BUQUE').replace(/\s+/g, '_')}__${config.viaje}_${config.puerto}_IMP.docx`
-  const pags = 3 + Math.ceil(fotos.length / 2) + (sof.entradas.some((e) => e.fecha) ? 1 : 0) + 1
+  const pags = 3 + Math.ceil(fotos.length / 2) + 1
   const Chk = ({ ok, t }) => (
     <div className="flex items-center gap-2"><div className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${ok ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'}`}>{ok ? '✓' : '—'}</div><span className={ok ? 'text-navy' : 'text-gray-400'}>{t}</span></div>
   )
@@ -544,7 +517,6 @@ function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, sof, gen
             <Chk ok={stowage.bodegas.some((b) => parseFloat(b.tonelaje) > 0)} t="Stowage plan" />
             <Chk ok={!!stowage.observaciones} t="Observaciones" />
             <Chk ok={fotos.length > 0} t={`${fotos.length} fotos de bodegas`} />
-            <Chk ok={sof.entradas.some((e) => e.fecha)} t="Statements of Facts" />
           </div>
         </div>
         <Boton onClick={onGenerar} deshabilitado={generando} icono={generando ? null : <Download size={18} />} className="!w-full !py-4 !text-base !rounded-xl">
@@ -584,7 +556,7 @@ const CLIENTE = {
   telefono: '01 800 021 33 22',
 }
 
-async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, sof }) {
+async function generarDocx({ config, operacion, stowage, fotos, fotosPortada }) {
   const {
     Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun,
     Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, PageBreak, VerticalAlign,
@@ -612,14 +584,16 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
   }
 
   // ═══ PORTADA ═══
-  const portada = [new Paragraph({ children: [] })]
-  for (const fp of fotosPortada) {
+  // Dos fotos deben llenar la cuartilla. 590px = 6.14" a 96 DPI (ancho completo del contenido)
+  const portada = []
+  for (let i = 0; i < fotosPortada.length; i++) {
+    const fp = fotosPortada[i]
     const dims = await obtenerDimensiones(fp.archivo)
-    const anchoPt = 442
-    const altoPt = Math.round((dims.alto / dims.ancho) * anchoPt)
+    const anchoPt = 590
+    const naturalHeight = Math.round((dims.alto / dims.ancho) * anchoPt)
+    const altoPt = Math.max(naturalHeight, 380)
     portada.push(
-      new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(fp.archivo), transformation: { width: anchoPt, height: altoPt }, altText: { title: 'Portada', description: 'Buque', name: 'portada' } })] }),
-      new Paragraph({ children: [] })
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: i === 0 ? 0 : 120, after: 0 }, children: [new ImageRun({ type: 'jpg', data: await leerImagen(fp.archivo), transformation: { width: anchoPt, height: altoPt }, altText: { title: 'Portada', description: 'Buque', name: 'portada' } })] }),
     )
   }
   portada.push(new Paragraph({ children: [new PageBreak()] }))
@@ -685,74 +659,97 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
 
   // ═══ PÁGINAS 4+: FOTOS ═══
   const pagsFotos = []
-  const ordenCats = [...new Set(fotos.map((f) => f.categoriaKey))]
-  const fotosOrdenadas = []
-  for (const clave of ordenCats) {
-    fotosOrdenadas.push(...fotos.filter((f) => f.categoriaKey === clave))
+  const esDocumentos = (cat) => cat === 'seccion-DOCUMENTOS'
+  const tituloCategoria = (cat) => cat.startsWith('bodega-')
+    ? `BODEGA No ${cat.replace('bodega-', '').padStart(2, '0')}`
+    : cat.replace('seccion-', '')
+
+  // Construir lista ordenada de todas las categorías (bodegas del stowage + secciones de fotos)
+  const bodegasDelStowage = stowage.bodegas.map((_, idx) => `bodega-${idx + 1}`)
+  const seccionesOrdenadas = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
+  const todasCats = [...bodegasDelStowage, ...seccionesOrdenadas]
+
+  // Agrupar fotos por categoría
+  const fotosPorCat = {}
+  for (const f of fotos) {
+    if (!fotosPorCat[f.categoriaKey]) fotosPorCat[f.categoriaKey] = []
+    fotosPorCat[f.categoriaKey].push(f)
   }
 
-  let catActual = null
-  for (let i = 0; i < fotosOrdenadas.length; i += 2) {
-    const f1 = fotosOrdenadas[i], f2 = fotosOrdenadas[i + 1]
-    const pagina = []
+  for (const cat of todasCats) {
+    const fotosGrupo = fotosPorCat[cat] || []
+    const bodegaIdx = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
+    const esEmpty = bodegaIdx >= 0 && stowage.bodegas[bodegaIdx] && stowage.bodegas[bodegaIdx].producto.toUpperCase().trim() === 'EMPTY' && fotosGrupo.length === 0
 
-    if (f1.categoriaKey !== catActual) {
-      catActual = f1.categoriaKey
-      const etiqueta = catActual.startsWith('bodega-')
-        ? `BODEGA No ${catActual.replace('bodega-', '').padStart(2, '0')}`
-        : catActual.replace('seccion-', '')
-      pagina.push(new Paragraph({
-        alignment: AlignmentType.CENTER, spacing: { before: 100, after: 100 },
-        children: [new TextRun({ text: etiqueta, bold: true, size: 28, font: 'Calibri' })],
-      }))
+    if (esEmpty) {
+      // Bodega EMPTY sin fotos: página con título + "EMPTY" centrado
+      pagsFotos.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER, spacing: { before: 100, after: 100 },
+          children: [new TextRun({ text: tituloCategoria(cat), bold: true, size: 28, font: 'Arial' })],
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER, spacing: { before: 4500 },
+          children: [new TextRun({ text: 'EMPTY', bold: true, size: 180, font: 'Times New Roman' })],
+        }),
+        new Paragraph({ children: [new PageBreak()] }),
+      )
+      continue
     }
 
-    const dims1 = await obtenerDimensiones(f1.archivo)
-    const alto1Pt = Math.round((dims1.alto / dims1.ancho) * 442)
-    pagina.push(
-      new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f1.archivo), transformation: { width: 442, height: Math.min(alto1Pt, 270) }, altText: { title: 'Foto', description: 'Operación', name: `foto${i}` } })] }),
-    )
+    if (fotosGrupo.length === 0) continue
 
-    if (f2) {
-      if (f2.categoriaKey !== catActual) {
-        catActual = f2.categoriaKey
-        const etiqueta2 = catActual.startsWith('bodega-')
-          ? `BODEGA No ${catActual.replace('bodega-', '').padStart(2, '0')}`
-          : catActual.replace('seccion-', '')
+    let catTituloPuesto = false
+    let i = 0
+    while (i < fotosGrupo.length) {
+      const pagina = []
+
+      // Título de sección al inicio del grupo
+      if (!catTituloPuesto) {
+        catTituloPuesto = true
         pagina.push(new Paragraph({
-          alignment: AlignmentType.CENTER, spacing: { before: 100, after: 50 },
-          children: [new TextRun({ text: etiqueta2, bold: true, size: 28, font: 'Calibri' })],
+          alignment: AlignmentType.CENTER, spacing: { before: 100, after: 100 },
+          children: [new TextRun({ text: tituloCategoria(cat), bold: true, size: 28, font: 'Arial' })],
         }))
       }
-      const dims2 = await obtenerDimensiones(f2.archivo)
-      const alto2Pt = Math.round((dims2.alto / dims2.ancho) * 442)
-      pagina.push(
-        new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f2.archivo), transformation: { width: 442, height: Math.min(alto2Pt, 270) }, altText: { title: 'Foto', description: 'Operación', name: `foto${i + 1}` } })] }),
-      )
+
+      if (esDocumentos(cat)) {
+        // DOCUMENTOS: 1 foto por página, ancho 545px = ~5.7"
+        const dims = await obtenerDimensiones(fotosGrupo[i].archivo)
+        const altoPt = Math.min(Math.round((dims.alto / dims.ancho) * 545), 710)
+        pagina.push(
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(fotosGrupo[i].archivo), transformation: { width: 545, height: altoPt }, altText: { title: 'Foto', description: 'Documento', name: `foto-doc-${i}` } })] }),
+        )
+        i += 1
+      } else {
+        // 2 fotos por página, ancho completo 590px = 6.14"
+        const f1 = fotosGrupo[i]
+        const dims1 = await obtenerDimensiones(f1.archivo)
+        const alto1Pt = Math.min(Math.round((dims1.alto / dims1.ancho) * 590), 370)
+        pagina.push(
+          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 400 }, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f1.archivo), transformation: { width: 590, height: alto1Pt }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i}` } })] }),
+        )
+
+        if (i + 1 < fotosGrupo.length) {
+          const f2 = fotosGrupo[i + 1]
+          const dims2 = await obtenerDimensiones(f2.archivo)
+          const alto2Pt = Math.min(Math.round((dims2.alto / dims2.ancho) * 590), 370)
+          pagina.push(
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f2.archivo), transformation: { width: 590, height: alto2Pt }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i + 1}` } })] }),
+          )
+          i += 2
+        } else {
+          i += 1
+        }
+      }
+
+      pagina.push(new Paragraph({ children: [new PageBreak()] }))
+      pagsFotos.push(...pagina)
     }
-    pagina.push(new Paragraph({ children: [new PageBreak()] }))
-    pagsFotos.push(...pagina)
   }
 
-  // ═══ SOF ═══
-  const pagsSOF = []
-  if (sof.entradas.some((e) => e.fecha)) {
-    pagsSOF.push(
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new TextRun({ text: 'STATEMENTS OF FACTS', bold: true, size: 28, font: 'Calibri' })] }),
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 300 }, children: [new TextRun({ text: `M.V ${config.buque} ${config.viaje}`, bold: true, size: 24, font: 'Calibri' })] }),
-    )
-    for (const ent of sof.entradas) {
-      if (!ent.fecha) continue
-      pagsSOF.push(
-        new Paragraph({ spacing: { before: 200, after: 0 }, children: [new TextRun({ text: ent.fecha, bold: true, size: 22, font: 'Calibri' })] }),
-        new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: ent.diaSemana, bold: true, size: 20, font: 'Calibri' })] }),
-      )
-      for (const lin of ent.lineas) {
-        if (!lin.actividad) continue
-        pagsSOF.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: `${lin.horaInicio}-${lin.horaFin} ${lin.actividad}`, size: 20, font: 'Calibri' })] }))
-      }
-    }
-  }
+  // Quitar el último PageBreak de fotos para evitar página vacía al final
+  if (pagsFotos.length > 0) pagsFotos.pop()
 
   // ═══ PASO 1: Generar documento con docx library (header/footer temporal) ═══
   const dummyP = new Paragraph({ children: [] })
@@ -762,7 +759,7 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
       properties: seccion,
       headers: { default: new Header({ children: [dummyP] }) },
       footers: { default: new Footer({ children: [dummyP] }) },
-      children: [...portada, ...pag2, ...pag3, ...pagsFotos, ...pagsSOF, new Paragraph({ children: [] })],
+      children: [...portada, ...pag2, ...pag3, ...pagsFotos],
     }],
   })
 
@@ -867,30 +864,28 @@ async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, so
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// APP PRINCIPAL
+// HOMEPAGE / DASHBOARD
 // ═══════════════════════════════════════════════════════════════════
 
-export default function App() {
-  const [paso, setPaso] = useState(0)
-  const [config, setConfig] = useState(configInicial())
-  const [operacion, setOperacion] = useState(operacionInicial())
-  const [stowage, setStowage] = useState(stowageInicial())
-  const [fotos, setFotos] = useState([])
-  const [fotosPortada, setFotosPortada] = useState([])
-  const [sof, setSOF] = useState(sofInicial())
-  const [generando, setGenerando] = useState(false)
+function formatearFechaRelativa(iso) {
+  if (!iso) return ''
+  const ahora = Date.now()
+  const fecha = new Date(iso)
+  const diff = ahora - fecha.getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Justo ahora'
+  if (mins < 60) return `Hace ${mins} min`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `Hace ${hrs}h`
+  const dias = Math.floor(hrs / 24)
+  if (dias < 7) return `Hace ${dias}d`
+  return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+}
 
-  const manejarGenerar = async () => {
-    setGenerando(true)
-    try {
-      await generarDocx({ config, operacion, stowage, fotos, fotosPortada, sof })
-    } catch (err) {
-      console.error(err)
-      alert('Error al generar: ' + err.message)
-    } finally {
-      setGenerando(false)
-    }
-  }
+function PaginaInicio({ reportes, onNuevo, onAbrir, onEliminar, onDescargar, descargandoId }) {
+  const total = reportes.length
+  const completados = reportes.filter((r) => r.progreso >= 100).length
+  const enProgreso = total - completados
 
   return (
     <div className="font-source bg-gradient-to-br from-gray-50 to-slate-100 min-h-screen text-navy">
@@ -906,6 +901,308 @@ export default function App() {
           </div>
         </div>
         <div className="text-xs text-white/30 font-lexend">Naviera SMP, S.A. de C.V.</div>
+      </div>
+
+      <div className="max-w-[1100px] mx-auto px-6 pt-8 pb-16">
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          {[
+            { label: 'Total Reportes', valor: total, icono: <BarChart3 size={20} />, color: 'bg-navy' },
+            { label: 'Completados', valor: completados, icono: <CheckCircle2 size={20} />, color: 'bg-green-600' },
+            { label: 'En Progreso', valor: enProgreso, icono: <Loader2 size={20} />, color: 'bg-accent' },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
+              <div className={`w-11 h-11 rounded-xl ${s.color} flex items-center justify-center text-white`}>{s.icono}</div>
+              <div>
+                <p className="m-0 text-2xl font-bold text-navy font-lexend">{s.valor}</p>
+                <p className="m-0 text-xs text-gray-400 font-lexend">{s.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Header + Botón nuevo */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="m-0 text-xl font-bold font-lexend text-navy">Mis Reportes</h2>
+          <Boton icono={<Plus size={18} />} onClick={onNuevo} className="!py-3 !px-6 !text-base">Nuevo Reporte</Boton>
+        </div>
+
+        {/* Estado vacío */}
+        {total === 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 text-center">
+            <Ship size={56} className="mx-auto text-gray-300 mb-4" />
+            <h3 className="text-lg font-bold text-navy font-lexend m-0 mb-2">No hay reportes todavía</h3>
+            <p className="text-sm text-gray-400 m-0 mb-6">Crea tu primer reporte de operación para empezar</p>
+            <Boton icono={<Plus size={18} />} onClick={onNuevo} className="!py-3 !px-8 !text-base">Crear Primer Reporte</Boton>
+          </div>
+        )}
+
+        {/* Grid de tarjetas */}
+        {total > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {reportes.map((r) => (
+              <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                <div className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="m-0 text-base font-bold text-navy font-lexend truncate">
+                        {r.buque || 'Sin nombre'}
+                      </h3>
+                      <p className="m-0 text-xs text-gray-400 font-lexend mt-0.5">
+                        {r.puerto}-{r.consecutivo}-{r.anio}  {r.viaje}
+                      </p>
+                    </div>
+                    <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold font-lexend ${r.progreso >= 100 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-accent'}`}>
+                      {r.progreso >= 100 ? 'Completo' : `${r.progreso}%`}
+                    </div>
+                  </div>
+
+                  {/* Barra de progreso */}
+                  <div className="w-full h-2 bg-gray-100 rounded-full mb-3 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${r.progreso >= 100 ? 'bg-green-500' : 'bg-accent'}`}
+                      style={{ width: `${Math.min(r.progreso, 100)}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-gray-400 font-lexend mb-4">
+                    <span>{r.numFotos || 0} fotos · {r.numFotosPortada || 0} portada</span>
+                    <span>{formatearFechaRelativa(r.ultimaEdicion)}</span>
+                  </div>
+
+                  {/* Acciones */}
+                  <div className="flex gap-2">
+                    <Boton onClick={() => onAbrir(r.id)} className="flex-1 !py-2 !text-xs !rounded-lg" icono={<ChevronRight size={14} />}>
+                      Continuar
+                    </Boton>
+                    {r.progreso >= 100 && (
+                      <Boton variante="secundario" className="!py-2 !px-3 !rounded-lg" deshabilitado={descargandoId === r.id}
+                        onClick={() => onDescargar(r.id)}
+                        icono={descargandoId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                      />
+                    )}
+                    <Boton variante="peligro" className="!py-2 !px-3 !rounded-lg" onClick={() => {
+                      if (confirm(`¿Eliminar el reporte de ${r.buque || 'este buque'}?`)) onEliminar(r.id)
+                    }} icono={<Trash2 size={14} />} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// APP PRINCIPAL
+// ═══════════════════════════════════════════════════════════════════
+
+export default function App() {
+  const [vista, setVista] = useState('inicio') // 'inicio' | 'wizard'
+  const [reporteActualId, setReporteActualId] = useState(null)
+  const [reportes, setReportes] = useState([])
+
+  const [paso, setPaso] = useState(0)
+  const [config, setConfig] = useState(configInicial())
+  const [operacion, setOperacion] = useState(operacionInicial())
+  const [stowage, setStowage] = useState(stowageInicial())
+  const [fotos, setFotos] = useState([])
+  const [fotosPortada, setFotosPortada] = useState([])
+  const [generando, setGenerando] = useState(false)
+  const [generadoFlag, setGeneradoFlag] = useState(false)
+  const [descargandoId, setDescargandoId] = useState(null)
+  const [cargando, setCargando] = useState(false)
+
+  const guardadoTimeout = useRef(null)
+  const fotosGuardadasRef = useRef(false)
+
+  // Cargar índice al montar
+  useEffect(() => {
+    setReportes(obtenerIndice())
+  }, [])
+
+  // ─── Auto-guardado de datos de texto (debounced 1.5s) ───
+  const flushGuardado = useCallback(() => {
+    if (!reporteActualId) return
+    clearTimeout(guardadoTimeout.current)
+    guardarReporte(reporteActualId, { config, operacion, stowage, pasoActual: paso, generado: generadoFlag })
+    const indice = obtenerIndice().map((r) =>
+      r.id === reporteActualId ? {
+        ...r,
+        buque: config.buque, puerto: config.puerto, consecutivo: config.consecutivo,
+        anio: config.anio, viaje: config.viaje,
+        codigo: `${config.puerto}-${config.consecutivo}-${config.anio}`,
+        ultimaEdicion: new Date().toISOString(), pasoActual: paso,
+        numFotos: fotos.length, numFotosPortada: fotosPortada.length,
+        progreso: calcularProgreso({ config, operacion, stowage, numFotos: fotos.length, numFotosPortada: fotosPortada.length, generado: generadoFlag }),
+      } : r
+    )
+    guardarIndice(indice)
+    setReportes(indice)
+  }, [reporteActualId, config, operacion, stowage, paso, fotos.length, fotosPortada.length, generadoFlag])
+
+  useEffect(() => {
+    if (!reporteActualId || vista !== 'wizard') return
+    clearTimeout(guardadoTimeout.current)
+    guardadoTimeout.current = setTimeout(flushGuardado, 1500)
+    return () => clearTimeout(guardadoTimeout.current)
+  }, [config, operacion, stowage, paso, flushGuardado, reporteActualId, vista])
+
+  // ─── Guardar fotos en IndexedDB cuando cambian ───
+  useEffect(() => {
+    if (!reporteActualId || vista !== 'wizard' || cargando) return
+    // Evitar guardar justo después de cargar
+    if (!fotosGuardadasRef.current) { fotosGuardadasRef.current = true; return }
+    guardarFotosReporte(reporteActualId, fotos, fotosPortada).catch(console.error)
+  }, [fotos, fotosPortada, reporteActualId, vista, cargando])
+
+  // ─── Acciones de la homepage ───
+  const crearReporte = () => {
+    const id = uid()
+    const nuevoConfig = configInicial()
+    const nuevoOp = operacionInicial()
+    const nuevoStow = stowageInicial()
+    guardarReporte(id, { config: nuevoConfig, operacion: nuevoOp, stowage: nuevoStow, pasoActual: 0, generado: false })
+    const entrada = {
+      id, buque: '', puerto: nuevoConfig.puerto, consecutivo: nuevoConfig.consecutivo,
+      anio: nuevoConfig.anio, viaje: nuevoConfig.viaje,
+      codigo: `${nuevoConfig.puerto}-${nuevoConfig.consecutivo}-${nuevoConfig.anio}`,
+      ultimaEdicion: new Date().toISOString(), pasoActual: 0,
+      progreso: 0, numFotos: 0, numFotosPortada: 0,
+    }
+    const nuevoIndice = [entrada, ...obtenerIndice()]
+    guardarIndice(nuevoIndice)
+    setReportes(nuevoIndice)
+
+    setConfig(nuevoConfig)
+    setOperacion(nuevoOp)
+    setStowage(nuevoStow)
+    setFotos([])
+    setFotosPortada([])
+    setPaso(0)
+    setGeneradoFlag(false)
+    setReporteActualId(id)
+    fotosGuardadasRef.current = false
+    setVista('wizard')
+  }
+
+  const abrirReporte = async (id) => {
+    setCargando(true)
+    const datos = cargarReporte(id)
+    if (!datos) { setCargando(false); return }
+
+    setConfig(datos.config || configInicial())
+    setOperacion(datos.operacion || operacionInicial())
+    setStowage(datos.stowage || stowageInicial())
+    setPaso(datos.pasoActual || 0)
+    setGeneradoFlag(datos.generado || false)
+
+    try {
+      const { fotos: fotosDB, fotosPortada: portadaDB } = await cargarFotosReporte(id)
+      setFotos(fotosDB)
+      setFotosPortada(portadaDB)
+    } catch (e) {
+      console.error('Error cargando fotos:', e)
+      setFotos([])
+      setFotosPortada([])
+    }
+
+    setReporteActualId(id)
+    fotosGuardadasRef.current = false
+    setVista('wizard')
+    setCargando(false)
+  }
+
+  const eliminarReporteHandler = async (id) => {
+    eliminarReporteStorage(id)
+    try { await eliminarFotosReporte(id) } catch (e) { console.error(e) }
+    setReportes(obtenerIndice())
+  }
+
+  const descargarDesdeInicio = async (id) => {
+    setDescargandoId(id)
+    try {
+      const datos = cargarReporte(id)
+      if (!datos) return
+      const { fotos: fotosDB, fotosPortada: portadaDB } = await cargarFotosReporte(id)
+      await generarDocx({ config: datos.config, operacion: datos.operacion, stowage: datos.stowage, fotos: fotosDB, fotosPortada: portadaDB })
+    } catch (err) {
+      console.error(err)
+      alert('Error al generar: ' + err.message)
+    } finally {
+      setDescargandoId(null)
+    }
+  }
+
+  const volverAInicio = () => {
+    flushGuardado()
+    if (reporteActualId && fotos.length > 0) {
+      guardarFotosReporte(reporteActualId, fotos, fotosPortada).catch(console.error)
+    }
+    setReportes(obtenerIndice())
+    setReporteActualId(null)
+    setVista('inicio')
+  }
+
+  const manejarGenerar = async () => {
+    setGenerando(true)
+    try {
+      await generarDocx({ config, operacion, stowage, fotos, fotosPortada })
+      setGeneradoFlag(true)
+    } catch (err) {
+      console.error(err)
+      alert('Error al generar: ' + err.message)
+    } finally {
+      setGenerando(false)
+    }
+  }
+
+  // ─── Vista: Homepage ───
+  if (vista === 'inicio') {
+    return <PaginaInicio
+      reportes={reportes}
+      onNuevo={crearReporte}
+      onAbrir={abrirReporte}
+      onEliminar={eliminarReporteHandler}
+      onDescargar={descargarDesdeInicio}
+      descargandoId={descargandoId}
+    />
+  }
+
+  // ─── Vista: Wizard (cargando) ───
+  if (cargando) {
+    return (
+      <div className="font-source bg-gradient-to-br from-gray-50 to-slate-100 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 size={40} className="animate-spin text-accent mx-auto mb-4" />
+          <p className="text-gray-500 font-lexend">Cargando reporte...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Vista: Wizard ───
+  return (
+    <div className="font-source bg-gradient-to-br from-gray-50 to-slate-100 min-h-screen text-navy">
+      {/* Barra superior */}
+      <div className="bg-navy px-8 py-4 flex items-center justify-between shadow-lg">
+        <div className="flex items-center gap-3.5">
+          <button onClick={volverAInicio} className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center border-none cursor-pointer transition-colors" title="Volver a inicio">
+            <Home size={20} className="text-white" />
+          </button>
+          <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
+            <Ship size={22} className="text-white" />
+          </div>
+          <div>
+            <h1 className="m-0 text-lg font-bold text-white font-lexend tracking-tight">SMP Reportes</h1>
+            <p className="m-0 text-[11px] text-white/40 font-lexend">{config.buque || 'Nuevo Reporte'} — {config.puerto}-{config.consecutivo}-{config.anio}</p>
+          </div>
+        </div>
+        <button onClick={volverAInicio} className="text-xs text-white/50 hover:text-white font-lexend bg-transparent border-none cursor-pointer transition-colors flex items-center gap-1.5">
+          <Home size={14} /> Volver a Inicio
+        </button>
       </div>
 
       {/* Navegación */}
@@ -936,8 +1233,7 @@ export default function App() {
         {paso === 1 && <PasoOperacion operacion={operacion} setOperacion={setOperacion} />}
         {paso === 2 && <PasoStowage stowage={stowage} setStowage={setStowage} />}
         {paso === 3 && <PasoFotos fotos={fotos} setFotos={setFotos} fotosPortada={fotosPortada} setFotosPortada={setFotosPortada} numBodegas={stowage.bodegas.length} />}
-        {paso === 4 && <PasoSOF sof={sof} setSOF={setSOF} />}
-        {paso === 5 && <PasoGenerar config={config} operacion={operacion} stowage={stowage} fotos={fotos} fotosPortada={fotosPortada} sof={sof} generando={generando} onGenerar={manejarGenerar} />}
+        {paso === 4 && <PasoGenerar config={config} operacion={operacion} stowage={stowage} fotos={fotos} fotosPortada={fotosPortada} generando={generando} onGenerar={manejarGenerar} />}
 
         {/* Navegación inferior */}
         <div className="flex justify-between mt-8 pt-5 border-t border-gray-100">
