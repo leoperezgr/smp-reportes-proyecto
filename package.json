@@ -62,7 +62,8 @@
     "publish": {
       "provider": "github",
       "owner": "leoperezgr",
-      "repo": "smp-reportes-proyecto"
+      "repo": "smp-reportes-proyecto",
+      "releaseType": "release"
     }
   }
 }
