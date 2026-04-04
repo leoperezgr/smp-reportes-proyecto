@@ -409,5 +409,15 @@ Ejemplo: `REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
 - **Empresa**: Naviera SMP, S.A. de C.V.
 - **Web**: https://navierasmp.com.mx/
 - **Usuario final**: Operador portuario (nivel técnico bajo, usa desktop Windows)
-- **Versión**: 1.1.4
+- **Versión**: 1.1.5
 - **Documento de referencia**: `referencia/REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
+
+---
+
+## Reglas de versionado
+
+Cada vez que el usuario pida una actualización (nueva feature, fix, cambio), **siempre** incrementar el número de versión en **ambos** lugares:
+1. `package.json` → campo `"version"`
+2. `src/componentes/PaginaInicio.jsx` → el span con el label `vX.X.X` en el header
+
+Usar versionado semántico: patch (1.1.x) para fixes/cambios menores, minor (1.x.0) para features nuevas.

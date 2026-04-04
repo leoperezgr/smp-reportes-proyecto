@@ -9,7 +9,7 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
     const fpc = {}
     for (const f of fotos) { if (!fpc[f.categoriaKey]) fpc[f.categoriaKey] = []; fpc[f.categoriaKey].push(f) }
     const bodegas = stowage.bodegas.map((_, i) => `bodega-${i + 1}`)
-    const secciones = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
+    const secciones = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-CARGA DE EQUIPO FFCC', 'seccion-DOCUMENTOS']
     for (const cat of [...bodegas, ...secciones]) {
       const g = fpc[cat] || []
       const bi = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
@@ -67,7 +67,7 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
           paginas.push({ tipo: 'stowage' })
 
           const bodegasDelStowage = stowage.bodegas.map((_, idx) => `bodega-${idx + 1}`)
-          const seccionesOrdenadas = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
+          const seccionesOrdenadas = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-CARGA DE EQUIPO FFCC', 'seccion-DOCUMENTOS']
           const todasCats = [...bodegasDelStowage, ...seccionesOrdenadas]
 
           const fotosPorCat = {}
