@@ -27,8 +27,9 @@ export default function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPorta
   const catActual = categorias[bodegaSel] || categorias[0]
 
   const procesarArchivos = async (archivos) => {
+    const ordenados = [...archivos].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
     const nuevas = []
-    for (const a of archivos) {
+    for (const a of ordenados) {
       if (!a.type.startsWith('image/')) continue
       nuevas.push({ id: uid(), archivo: a, dataUrl: await leerComoDataURL(a), categoriaKey: catActual.clave, nombre: a.name })
     }
@@ -116,20 +117,18 @@ export default function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPorta
           return (
             <div key={cat.clave} className="mb-6">
               {verTodas && <h4 className="font-lexend text-sm font-bold text-accent m-0 mb-3 pb-2 border-b-2 border-accent-light">{cat.etiqueta.toUpperCase()} — {grupo.length} fotos</h4>}
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
                 {grupo.map((foto) => (
                   <div key={foto.id} draggable onDragStart={() => setArrastrado(foto.id)} onDragOver={(e) => { e.preventDefault(); if (arrastrado) setSobre(foto.id) }} onDragEnd={finalizarArrastre}
-                    className={`relative rounded-xl overflow-hidden cursor-grab transition-all ${sobre === foto.id ? 'border-2 border-accent' : 'border-2 border-gray-200'} ${arrastrado === foto.id ? 'opacity-50' : ''}`}>
-                    <img src={foto.dataUrl} alt={foto.nombre} className="w-full h-[120px] object-cover block" />
-                    <div className="px-2 py-1.5 bg-white flex items-center justify-between gap-1">
-                      <div className="flex items-center gap-1">
-                        <GripVertical size={14} className="text-gray-300" />
-                        <select value={foto.categoriaKey} onChange={(e) => setFotos((p) => p.map((f) => f.id === foto.id ? { ...f, categoriaKey: e.target.value } : f))}
-                          className="border-none text-[11px] font-semibold text-accent bg-transparent cursor-pointer font-lexend">
-                          {categorias.map((c) => <option key={c.clave} value={c.clave}>{c.etiqueta}</option>)}
-                        </select>
-                      </div>
-                      <button onClick={() => setFotos((p) => p.filter((f) => f.id !== foto.id))} className="bg-transparent border-none cursor-pointer p-0.5"><Trash2 size={14} className="text-red-500" /></button>
+                    className={`relative rounded-xl cursor-grab transition-all ${sobre === foto.id ? 'border-2 border-accent' : 'border-2 border-gray-200'} ${arrastrado === foto.id ? 'opacity-50' : ''}`}>
+                    <img src={foto.dataUrl} alt={foto.nombre} className="w-full h-[120px] object-cover block rounded-t-[10px]" />
+                    <div className="px-2 py-2 bg-white rounded-b-[10px] flex items-center gap-2">
+                      <GripVertical size={16} className="text-gray-300 shrink-0" />
+                      <select value={foto.categoriaKey} onChange={(e) => setFotos((p) => p.map((f) => f.id === foto.id ? { ...f, categoriaKey: e.target.value } : f))}
+                        className="border-none text-xs font-semibold text-accent bg-transparent cursor-pointer font-lexend min-w-0 flex-1">
+                        {categorias.map((c) => <option key={c.clave} value={c.clave}>{c.etiqueta}</option>)}
+                      </select>
+                      <button onClick={() => setFotos((p) => p.filter((f) => f.id !== foto.id))} className="bg-transparent border-none cursor-pointer p-0.5 shrink-0"><Trash2 size={16} className="text-red-500" /></button>
                     </div>
                   </div>
                 ))}

@@ -131,6 +131,12 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
     ? `BODEGA No ${cat.replace('bodega-', '').padStart(2, '0')}`
     : cat.replace('seccion-', '')
 
+  // Altura disponible en px (96 DPI) para contenido de fotos por página
+  const altoDisponibleDXA = DOC.altoHoja - DOC.margenTop - DOC.margenBottom - DOC.header - DOC.footer
+  const altoDisponiblePx = Math.floor(altoDisponibleDXA / 1440 * 96)
+  const espacioTituloPx = 55   // título de categoría + spacing
+  const espacioEntreFotosPx = 13 // spacing: { after: 200 } ≈ 13px
+
   const bodegasDelStowage = stowage.bodegas.map((_, idx) => `bodega-${idx + 1}`)
   const seccionesOrdenadas = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
   const todasCats = [...bodegasDelStowage, ...seccionesOrdenadas]
@@ -167,6 +173,7 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
     let i = 0
     while (i < fotosGrupo.length) {
       const pagina = []
+      const conTitulo = !catTituloPuesto
 
       if (!catTituloPuesto) {
         catTituloPuesto = true
@@ -177,26 +184,34 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
       }
 
       if (esDocumentos(cat)) {
+        const maxAltoDoc = conTitulo ? altoDisponiblePx - espacioTituloPx : altoDisponiblePx
         const dims = await obtenerDimensiones(fotosGrupo[i].archivo)
-        const altoPt = Math.min(Math.round((dims.alto / dims.ancho) * 545), 710)
+        const altoPt = Math.min(Math.round((dims.alto / dims.ancho) * 545), maxAltoDoc)
         pagina.push(
           new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(fotosGrupo[i].archivo), transformation: { width: 545, height: altoPt }, altText: { title: 'Foto', description: 'Documento', name: `foto-doc-${i}` } })] }),
         )
         i += 1
       } else {
+        // Fotos de bodega: un poco más chicas que portada (550 vs 590)
+        const anchoBodega = 550
+        const espacioFotos = altoDisponiblePx - (conTitulo ? espacioTituloPx : 0) - espacioEntreFotosPx
+        const maxPorFoto = Math.floor(espacioFotos / 2)
+
         const f1 = fotosGrupo[i]
         const dims1 = await obtenerDimensiones(f1.archivo)
-        const alto1Pt = Math.min(Math.round((dims1.alto / dims1.ancho) * 590), 370)
+        const alto1Natural = Math.round((dims1.alto / dims1.ancho) * anchoBodega)
+        const alto1Pt = Math.min(alto1Natural, maxPorFoto)
         pagina.push(
-          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 400 }, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f1.archivo), transformation: { width: 590, height: alto1Pt }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i}` } })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f1.archivo), transformation: { width: anchoBodega, height: alto1Pt }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i}` } })] }),
         )
 
         if (i + 1 < fotosGrupo.length) {
           const f2 = fotosGrupo[i + 1]
           const dims2 = await obtenerDimensiones(f2.archivo)
-          const alto2Pt = Math.min(Math.round((dims2.alto / dims2.ancho) * 590), 370)
+          const alto2Natural = Math.round((dims2.alto / dims2.ancho) * anchoBodega)
+          const alto2Pt = Math.min(alto2Natural, maxPorFoto)
           pagina.push(
-            new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f2.archivo), transformation: { width: 590, height: alto2Pt }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i + 1}` } })] }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f2.archivo), transformation: { width: anchoBodega, height: alto2Pt }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i + 1}` } })] }),
           )
           i += 2
         } else {

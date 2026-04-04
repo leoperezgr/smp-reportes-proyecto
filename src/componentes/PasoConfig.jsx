@@ -3,7 +3,7 @@ import { PUERTOS } from '../constantes'
 import { Tarjeta, Entrada } from './ui'
 
 export default function PasoConfig({ config, setConfig }) {
-  const act = (c) => (e) => setConfig((p) => ({ ...p, [c]: e.target.value }))
+  const act = (c) => (e) => setConfig((p) => ({ ...p, [c]: c === 'buque' ? e.target.value.toUpperCase() : e.target.value }))
   return (
     <div className="flex flex-col gap-6">
       <Tarjeta titulo="Datos del Buque" subtitulo="Información principal de la embarcación" icono={<Ship size={22} />}>

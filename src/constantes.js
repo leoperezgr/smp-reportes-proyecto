@@ -79,7 +79,7 @@ export const operacionInicial = () => ({
   eventos: EVENTOS.map((n) => ({ nombre: n, mes: '', dia: '', anio: String(new Date().getFullYear()), hora: '' })),
   cargaTotal: '',
   cantidades: [{ descripcion: '', tipo: 'LOTE', piezas: '1', tonelaje: '' }],
-  bls: [{ numero: '', puerto: '', piezas: '1', tonelaje: '' }],
+  bls: [{ numero: 'BL-001', puerto: '', piezas: '1', tonelaje: '' }],
 })
 
 export const stowageInicial = () => ({

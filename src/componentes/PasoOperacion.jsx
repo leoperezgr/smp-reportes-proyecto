@@ -13,7 +13,7 @@ export default function PasoOperacion({ operacion, setOperacion }) {
             <thead>
               <tr className="bg-navy text-white">
                 {['Evento', 'Mes', 'Día, Año', 'Hora'].map((h) => (
-                  <th key={h} className="px-3 py-2.5 text-left font-lexend font-semibold">{h}</th>
+                  <th key={h} className={`px-3 py-2.5 font-lexend font-semibold ${h === 'Evento' ? 'text-left' : 'text-center'}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -28,21 +28,21 @@ export default function PasoOperacion({ operacion, setOperacion }) {
                       </div>
                     ) : ev.nombre}
                   </td>
-                  <td className="px-2 py-1.5">
-                    <select value={ev.mes} onChange={(e) => act(`eventos.${i}.mes`, e.target.value)} className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-xs bg-white">
+                  <td className="px-2 py-1.5 text-center">
+                    <select value={ev.mes} onChange={(e) => act(`eventos.${i}.mes`, e.target.value)} className="px-2 py-1.5 border border-gray-200 rounded-md text-xs bg-white text-center">
                       <option value="">—</option>
                       {MESES.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </td>
                   <td className="px-2 py-1.5">
-                    <div className="flex gap-1.5">
-                      <input value={ev.dia} onChange={(e) => act(`eventos.${i}.dia`, e.target.value)} placeholder="16" className="w-10 px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
-                      <input value={ev.anio} onChange={(e) => act(`eventos.${i}.anio`, e.target.value)} placeholder="2026" className="w-[52px] px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+                    <div className="flex gap-1.5 justify-center">
+                      <input value={ev.dia} onChange={(e) => act(`eventos.${i}.dia`, e.target.value)} placeholder="16" className="w-10 px-2 py-1.5 border border-gray-200 rounded-md text-xs text-center" />
+                      <input value={ev.anio} onChange={(e) => act(`eventos.${i}.anio`, e.target.value)} placeholder="2026" className="w-[52px] px-2 py-1.5 border border-gray-200 rounded-md text-xs text-center" />
                     </div>
                   </td>
                   <td className="px-2 py-1.5">
-                    <div className="flex items-center gap-1">
-                      <input value={ev.hora} onChange={(e) => act(`eventos.${i}.hora`, e.target.value)} onBlur={() => act(`eventos.${i}.hora`, formatearHora(ev.hora))} placeholder="16:30" className="w-20 px-2 py-1.5 border border-gray-200 rounded-md text-xs" />
+                    <div className="flex items-center gap-1 justify-center">
+                      <input value={ev.hora} onChange={(e) => act(`eventos.${i}.hora`, e.target.value)} onBlur={() => act(`eventos.${i}.hora`, formatearHora(ev.hora))} placeholder="16:30" className="w-20 px-2 py-1.5 border border-gray-200 rounded-md text-xs text-center" />
                       <span className="text-xs font-semibold text-navy">HRS</span>
                     </div>
                   </td>
@@ -80,14 +80,17 @@ export default function PasoOperacion({ operacion, setOperacion }) {
       <Tarjeta titulo="Bills of Lading (BL)" icono={<FileText size={22} />}>
         {operacion.bls.map((bl, i) => (
           <div key={i} className="grid grid-cols-[1fr_1fr_80px_1fr_40px] gap-2.5 mb-2.5 items-end">
-            <Entrada etiqueta={i === 0 ? 'Número de BL' : undefined} value={bl.numero} onChange={(e) => act(`bls.${i}.numero`, e.target.value)} placeholder="BL-001" />
+            <div className="flex flex-col gap-1">
+              {i === 0 && <label className="text-xs font-medium text-gray-400 font-lexend uppercase tracking-wider">Número de BL</label>}
+              <div className="px-3.5 py-2.5 bg-gray-100 border-[1.5px] border-gray-200 rounded-lg text-sm font-source text-navy font-semibold">{`BL-${String(i + 1).padStart(3, '0')}`}</div>
+            </div>
             <Entrada etiqueta={i === 0 ? 'Puerto/Producto' : undefined} value={bl.puerto} onChange={(e) => act(`bls.${i}.puerto`, e.target.value)} placeholder="PIG IRON" />
             <Entrada etiqueta={i === 0 ? 'Piezas' : undefined} value={bl.piezas} onChange={(e) => act(`bls.${i}.piezas`, e.target.value)} placeholder="1" />
             <Entrada etiqueta={i === 0 ? 'Tonelaje (MT)' : undefined} value={bl.tonelaje} onChange={(e) => act(`bls.${i}.tonelaje`, e.target.value)} onBlur={() => act(`bls.${i}.tonelaje`, formatearTonelaje(bl.tonelaje))} placeholder="19,919.000" />
             <Boton variante="fantasma" className="!p-1.5 mb-0.5" onClick={() => setOperacion((p) => ({ ...p, bls: p.bls.filter((_, j) => j !== i) }))}><Trash2 size={16} className="text-red-500" /></Boton>
           </div>
         ))}
-        <Boton variante="secundario" icono={<Plus size={16} />} onClick={() => setOperacion((p) => ({ ...p, bls: [...p.bls, { numero: '', puerto: '', piezas: '1', tonelaje: '' }] }))}>Agregar BL</Boton>
+        <Boton variante="secundario" icono={<Plus size={16} />} onClick={() => setOperacion((p) => ({ ...p, bls: [...p.bls, { numero: `BL-${String(p.bls.length + 1).padStart(3, '0')}`, puerto: '', piezas: '1', tonelaje: '' }] }))}>Agregar BL</Boton>
       </Tarjeta>
     </div>
   )
