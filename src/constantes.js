@@ -29,6 +29,7 @@ export const MESES = [
 export const SECCIONES_EXTRA = [
   'DESCARGA DE BUQUE',
   'AREA DE ALMACENAMIENTO',
+  'CARGA DE BUQUE',
   'DOCUMENTOS',
 ]
 

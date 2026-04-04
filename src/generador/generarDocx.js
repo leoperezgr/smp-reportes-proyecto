@@ -173,7 +173,7 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
   const espacioEntreFotosPx = 4 // mínimo espacio entre fotos
 
   const bodegasDelStowage = stowage.bodegas.map((_, idx) => `bodega-${idx + 1}`)
-  const seccionesOrdenadas = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
+  const seccionesOrdenadas = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-CARGA DE BUQUE', 'seccion-DOCUMENTOS']
   const todasCats = [...bodegasDelStowage, ...seccionesOrdenadas]
 
   const fotosPorCat = {}

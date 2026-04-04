@@ -207,7 +207,7 @@ Pantalla inicial que muestra todos los reportes guardados:
 - `PUERTOS`: 7 puertos (VER, ALT, LZC, MZT, MNZ, HOU, NOL)
 - `EVENTOS`: 5 eventos fijos de operación
 - `MESES`: 12 meses en español
-- `SECCIONES_EXTRA`: DESCARGA DE BUQUE, AREA DE ALMACENAMIENTO, DOCUMENTOS
+- `SECCIONES_EXTRA`: DESCARGA DE BUQUE, AREA DE ALMACENAMIENTO, CARGA DE BUQUE, DOCUMENTOS
 - `PASOS`: definición de los 5 pasos del wizard (clave, etiqueta, ícono)
 - `DOC`: medidas exactas del documento en DXA/EMU
 - `TABLA_EVENTOS`, `TABLA_CANTIDADES`, `TABLA_BL`, `TABLA_STOWAGE`: anchos de columnas
@@ -358,7 +358,8 @@ Cada página tiene:
 Secciones adicionales después de las bodegas (en este orden):
 1. "DESCARGA DE BUQUE" — fotos de la descarga
 2. "AREA DE ALMACENAMIENTO" — fotos del almacén
-3. "DOCUMENTOS" — fotos de documentación (incluye Statements of Facts como fotos escaneadas)
+3. "CARGA DE BUQUE" — fotos de la carga
+4. "DOCUMENTOS" — fotos de documentación (incluye Statements of Facts como fotos escaneadas)
 
 ---
 
@@ -375,7 +376,7 @@ Secciones adicionales después de las bodegas (en este orden):
 9. Nunca usar `\n` — usar `Paragraph` separados
 10. Font del documento: Calibri para todo el contenido del doc (Cambria en tablas específicas)
 11. Fotos de bodega: ordenar por bodega (1, 2, 3...) manteniendo el orden del usuario dentro de cada bodega
-12. Secciones después de bodegas siempre en orden: DESCARGA DE BUQUE → AREA DE ALMACENAMIENTO → DOCUMENTOS
+12. Secciones después de bodegas siempre en orden: DESCARGA DE BUQUE → AREA DE ALMACENAMIENTO → CARGA DE BUQUE → DOCUMENTOS
 13. Tamaños de fotos en el .docx (píxeles a 96 DPI): portada 590px ancho, bodegas 590px ancho (2 por página), documentos 545px ancho (1 por página)
 14. `Packer.toBlob()` para generar y descargar con file-saver o link temporal
 15. Bordes de tabla: `size: 4`
@@ -408,5 +409,5 @@ Ejemplo: `REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
 - **Empresa**: Naviera SMP, S.A. de C.V.
 - **Web**: https://navierasmp.com.mx/
 - **Usuario final**: Operador portuario (nivel técnico bajo, usa desktop Windows)
-- **Versión**: 1.0.2
+- **Versión**: 1.1.4
 - **Documento de referencia**: `referencia/REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
