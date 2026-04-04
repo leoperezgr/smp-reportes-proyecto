@@ -1,4 +1,5 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, dialog } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const path = require('path')
 
 function createWindow() {
@@ -24,9 +25,24 @@ function createWindow() {
   }
 
   win.setMenuBarVisibility(false)
+  return win
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+  autoUpdater.checkForUpdatesAndNotify()
+})
+
+autoUpdater.on('update-downloaded', () => {
+  dialog.showMessageBox({
+    type: 'info',
+    title: 'Actualización disponible',
+    message: 'Se descargó una nueva versión. La app se reiniciará para actualizar.',
+    buttons: ['Reiniciar ahora'],
+  }).then(() => {
+    autoUpdater.quitAndInstall()
+  })
+})
 
 app.on('window-all-closed', () => {
   app.quit()

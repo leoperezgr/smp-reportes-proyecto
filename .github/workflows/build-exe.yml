@@ -24,6 +24,8 @@ jobs:
 
       - name: Build Vite + Electron
         run: npm run electron:build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
