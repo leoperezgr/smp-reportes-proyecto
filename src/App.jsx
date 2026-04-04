@@ -36,6 +36,7 @@ export default function App() {
   const irAPaso = useCallback((i) => {
     setPaso(i)
     setMaxPasoVisitado((prev) => Math.max(prev, i))
+    window.scrollTo({ top: 0, behavior: 'instant' })
   }, [])
 
   const guardadoTimeout = useRef(null)

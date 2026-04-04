@@ -43,19 +43,53 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
   portada.push(new Paragraph({ children: [new PageBreak()] }))
 
   // ═══ PÁGINA 2: OPERACIÓN ═══
+  // Tabla de eventos: 5 columnas para alinear fecha/hora correctamente
+  const evCols = [4416, 1300, 700, 900, 1512] // nombre | mes | día | año | hora
+  const evTotal = evCols.reduce((a, b) => a + b, 0)
+
+  // Bordes para sub-columnas de fecha: sin bordes verticales internos
+  const sinBorde = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
+  const bordesMesIzq = { top: borde, bottom: borde, left: borde, right: sinBorde }
+  const bordesMedio = { top: borde, bottom: borde, left: sinBorde, right: sinBorde }
+  const bordesDer = { top: borde, bottom: borde, left: sinBorde, right: borde }
+
+  const celdaEv = (texto, ancho, bordesCelda, opts = {}) => new TableCell({
+    borders: bordesCelda,
+    width: { size: ancho, type: WidthType.DXA },
+    verticalAlign: VerticalAlign.CENTER,
+    margins: { top: 40, bottom: 40, left: 80, right: 80 },
+    children: [new Paragraph({
+      alignment: opts.alineacion || AlignmentType.LEFT,
+      children: [new TextRun({ text: texto || '', bold: opts.negrita, size: 22, font: 'Calibri' })],
+    })],
+  })
+
   const filasEventos = operacion.eventos.map((ev) => {
     const nombreEvento = ev.nombre === 'ARRIBO' && operacion.arriboA ? `ARRIBO A ${operacion.arriboA.toUpperCase()}` : ev.nombre
     return new TableRow({ children: [
-      celda(nombreEvento, { ancho: TABLA_EVENTOS.cols[0], negrita: true, tamano: 22 }),
-      celda(`${ev.mes}                  ${ev.dia},  ${ev.anio}       ${ev.hora}${ev.hora ? ' HRS' : ''}`, { ancho: TABLA_EVENTOS.cols[1], tamano: 22 }),
+      celdaEv(nombreEvento, evCols[0], bordes, { negrita: true }),
+      celdaEv(ev.mes, evCols[1], bordesMesIzq),
+      celdaEv(ev.dia ? `${ev.dia},` : '', evCols[2], bordesMedio, { alineacion: AlignmentType.RIGHT }),
+      celdaEv(ev.anio || '', evCols[3], bordesMedio, { alineacion: AlignmentType.LEFT }),
+      celdaEv(ev.hora ? `${ev.hora} HRS` : '', evCols[4], bordesDer, { alineacion: AlignmentType.CENTER }),
     ] })
   })
   filasEventos.push(new TableRow({ children: [
-    celda('CARGA TOTAL', { ancho: TABLA_EVENTOS.cols[0], negrita: true, tamano: 22 }),
-    celda(`                            ${operacion.cargaTotal}${operacion.cargaTotal ? ' MT' : ''}`, { ancho: TABLA_EVENTOS.cols[1], negrita: true, tamano: 22 }),
+    celda('CARGA TOTAL', { ancho: evCols[0], negrita: true, tamano: 22 }),
+    new TableCell({
+      borders: bordes,
+      width: { size: evCols[1] + evCols[2] + evCols[3] + evCols[4], type: WidthType.DXA },
+      columnSpan: 4,
+      verticalAlign: VerticalAlign.CENTER,
+      margins: { top: 40, bottom: 40, left: 80, right: 80 },
+      children: [new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: `${operacion.cargaTotal}${operacion.cargaTotal ? ' MT' : ''}`, bold: true, size: 22, font: 'Calibri' })],
+      })],
+    }),
   ] }))
 
-  const tablaEventos = new Table({ width: { size: TABLA_EVENTOS.total, type: WidthType.DXA }, columnWidths: TABLA_EVENTOS.cols, rows: filasEventos })
+  const tablaEventos = new Table({ width: { size: evTotal, type: WidthType.DXA }, columnWidths: evCols, rows: filasEventos })
 
   const filaSeparadora = (cols, color) => new TableRow({ children: cols.map((ancho) => celda('', { ancho, fondo: color })) })
 
@@ -86,7 +120,7 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
     new Paragraph({ children: [new TextRun({ text: 'CANTIDADES RECIBIDAS  :', bold: true, size: 36, font: 'Calibri' })] }),
     new Paragraph({ children: [] }),
     new Paragraph({ children: [] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: CLIENTE.nombre, bold: true, size: 32, font: 'Calibri' })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: operacion.puertoOrigen && operacion.paisOrigen ? `${CLIENTE.nombre}  ( ${operacion.puertoOrigen},  ${operacion.paisOrigen} )` : CLIENTE.nombre, bold: true, size: 32, font: 'Calibri' })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, children: [] }),
     tablaCant,
     new Paragraph({ children: [] }),
@@ -132,10 +166,11 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
     : cat.replace('seccion-', '')
 
   // Altura disponible en px (96 DPI) para contenido de fotos por página
-  const altoDisponibleDXA = DOC.altoHoja - DOC.margenTop - DOC.margenBottom - DOC.header - DOC.footer
+  // Restar márgenes + header/footer + buffer para spacing interno de Word
+  const altoDisponibleDXA = DOC.altoHoja - DOC.margenTop - DOC.margenBottom - DOC.header - DOC.footer - 200
   const altoDisponiblePx = Math.floor(altoDisponibleDXA / 1440 * 96)
   const espacioTituloPx = 55   // título de categoría + spacing
-  const espacioEntreFotosPx = 13 // spacing: { after: 200 } ≈ 13px
+  const espacioEntreFotosPx = 4 // mínimo espacio entre fotos
 
   const bodegasDelStowage = stowage.bodegas.map((_, idx) => `bodega-${idx + 1}`)
   const seccionesOrdenadas = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
@@ -184,34 +219,34 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
       }
 
       if (esDocumentos(cat)) {
-        const maxAltoDoc = conTitulo ? altoDisponiblePx - espacioTituloPx : altoDisponiblePx
-        const dims = await obtenerDimensiones(fotosGrupo[i].archivo)
-        const altoPt = Math.min(Math.round((dims.alto / dims.ancho) * 545), maxAltoDoc)
+        const espacioEnterDoc = conTitulo ? 0 : 14
+        const maxAltoDoc = altoDisponiblePx - (conTitulo ? espacioTituloPx : espacioEnterDoc)
+        if (!conTitulo) {
+          pagina.push(new Paragraph({ children: [] })) // enter entre header y foto
+        }
         pagina.push(
-          new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(fotosGrupo[i].archivo), transformation: { width: 545, height: altoPt }, altText: { title: 'Foto', description: 'Documento', name: `foto-doc-${i}` } })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(fotosGrupo[i].archivo), transformation: { width: 590, height: maxAltoDoc }, altText: { title: 'Foto', description: 'Documento', name: `foto-doc-${i}` } })] }),
         )
         i += 1
       } else {
-        // Fotos de bodega: un poco más chicas que portada (550 vs 590)
-        const anchoBodega = 550
-        const espacioFotos = altoDisponiblePx - (conTitulo ? espacioTituloPx : 0) - espacioEntreFotosPx
-        const maxPorFoto = Math.floor(espacioFotos / 2)
+        // Fotos de bodega: llenar toda la cuartilla
+        const anchoBodega = 590
+        const espacioEnterPx = conTitulo ? 0 : 14 // un "enter" entre header y foto solo en páginas sin título
+        const espacioFotos = altoDisponiblePx - (conTitulo ? espacioTituloPx : espacioEnterPx) - espacioEntreFotosPx
+        const altoPorFoto = Math.floor(espacioFotos / 2)
 
         const f1 = fotosGrupo[i]
-        const dims1 = await obtenerDimensiones(f1.archivo)
-        const alto1Natural = Math.round((dims1.alto / dims1.ancho) * anchoBodega)
-        const alto1Pt = Math.min(alto1Natural, maxPorFoto)
+        if (!conTitulo) {
+          pagina.push(new Paragraph({ children: [] })) // enter entre header y primera foto
+        }
         pagina.push(
-          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f1.archivo), transformation: { width: anchoBodega, height: alto1Pt }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i}` } })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f1.archivo), transformation: { width: anchoBodega, height: altoPorFoto }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i}` } })] }),
         )
 
         if (i + 1 < fotosGrupo.length) {
           const f2 = fotosGrupo[i + 1]
-          const dims2 = await obtenerDimensiones(f2.archivo)
-          const alto2Natural = Math.round((dims2.alto / dims2.ancho) * anchoBodega)
-          const alto2Pt = Math.min(alto2Natural, maxPorFoto)
           pagina.push(
-            new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f2.archivo), transformation: { width: anchoBodega, height: alto2Pt }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i + 1}` } })] }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagen(f2.archivo), transformation: { width: anchoBodega, height: altoPorFoto }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i + 1}` } })] }),
           )
           i += 2
         } else {

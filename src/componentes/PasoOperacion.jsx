@@ -65,6 +65,10 @@ export default function PasoOperacion({ operacion, setOperacion }) {
       </Tarjeta>
 
       <Tarjeta titulo="Cantidades Recibidas" icono={<List size={22} />}>
+        <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-gray-100">
+          <Entrada etiqueta="Puerto Origen" value={operacion.puertoOrigen} onChange={(e) => act('puertoOrigen', e.target.value.toUpperCase())} placeholder="IMMINGHAM" className="uppercase" />
+          <Entrada etiqueta="País" value={operacion.paisOrigen} onChange={(e) => act('paisOrigen', e.target.value.toUpperCase())} placeholder="UK" className="uppercase" />
+        </div>
         {operacion.cantidades.map((c, i) => (
           <div key={i} className="grid grid-cols-[2fr_1fr_80px_1fr_40px] gap-2.5 mb-2.5 items-end">
             <Entrada etiqueta={i === 0 ? 'Descripción' : undefined} value={c.descripcion} onChange={(e) => act(`cantidades.${i}.descripcion`, e.target.value)} placeholder="PIG IRON IN BULK" />
