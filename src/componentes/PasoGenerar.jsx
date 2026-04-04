@@ -13,7 +13,7 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
     for (const cat of [...bodegas, ...secciones]) {
       const g = fpc[cat] || []
       const bi = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
-      const esEmpty = bi >= 0 && stowage.bodegas[bi] && stowage.bodegas[bi].producto.toUpperCase().trim() === 'EMPTY' && g.length === 0
+      const esEmpty = bi >= 0 && g.length === 0
       if (esEmpty) { p += 1; continue }
       if (g.length === 0) continue
       p += cat === 'seccion-DOCUMENTOS' ? g.length : Math.ceil(g.length / 2)
@@ -79,7 +79,7 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
           for (const cat of todasCats) {
             const fotosGrupo = fotosPorCat[cat] || []
             const bodegaIdx = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
-            const esEmpty = bodegaIdx >= 0 && stowage.bodegas[bodegaIdx] && stowage.bodegas[bodegaIdx].producto.toUpperCase().trim() === 'EMPTY' && fotosGrupo.length === 0
+            const esEmpty = bodegaIdx >= 0 && fotosGrupo.length === 0
             const titulo = cat.startsWith('bodega-')
               ? `BODEGA No ${cat.replace('bodega-', '').padStart(2, '0')}`
               : cat.replace('seccion-', '')

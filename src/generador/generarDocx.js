@@ -188,7 +188,7 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
   for (const cat of todasCats) {
     const fotosGrupo = fotosPorCat[cat] || []
     const bodegaIdx = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
-    const esEmpty = bodegaIdx >= 0 && stowage.bodegas[bodegaIdx] && stowage.bodegas[bodegaIdx].producto.toUpperCase().trim() === 'EMPTY' && fotosGrupo.length === 0
+    const esEmpty = bodegaIdx >= 0 && fotosGrupo.length === 0
 
     if (esEmpty) {
       pagsFotos.push(
