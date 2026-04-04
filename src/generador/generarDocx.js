@@ -228,7 +228,7 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
 
   // ═══ PASO 2: Post-procesar con el template para header/footer exactos ═══
   const zipGen = await JSZip.loadAsync(blobInicial)
-  const templateBytes = await (await fetch('/TEMPLATE-DEACERO.docx')).arrayBuffer()
+  const templateBytes = await (await fetch('./TEMPLATE-DEACERO.docx')).arrayBuffer()
   const zipTpl = await JSZip.loadAsync(templateBytes)
 
   const codigoHeader = `${config.puerto}-LP-${config.consecutivo}-${config.anio}  MV ${config.buque}   ${config.viaje} VCZ`
