@@ -181,6 +181,9 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
     if (!fotosPorCat[f.categoriaKey]) fotosPorCat[f.categoriaKey] = []
     fotosPorCat[f.categoriaKey].push(f)
   }
+  for (const clave in fotosPorCat) {
+    fotosPorCat[clave].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true }))
+  }
 
   for (const cat of todasCats) {
     const fotosGrupo = fotosPorCat[cat] || []

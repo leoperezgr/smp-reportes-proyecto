@@ -192,7 +192,11 @@ export async function cargarFotosReporte(reporteId) {
     new Promise((r) => { const l = new FileReader(); l.onload = () => r(l.result); l.readAsDataURL(blob) })
 
   const fotosRaw = await cargarFotos(reporteId)
-  fotosRaw.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+  fotosRaw.sort((a, b) => {
+    const catCmp = (a.categoriaKey || '').localeCompare(b.categoriaKey || '')
+    if (catCmp !== 0) return catCmp
+    return (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true })
+  })
   const fotos = []
   for (const f of fotosRaw) {
     const archivo = new File([f.blob], f.nombre || 'foto.jpg', { type: f.blob.type || 'image/jpeg' })

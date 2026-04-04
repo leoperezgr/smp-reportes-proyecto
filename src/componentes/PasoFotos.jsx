@@ -21,6 +21,9 @@ export default function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPorta
   const fotosPorCat = useMemo(() => {
     const m = {}; categorias.forEach((c) => { m[c.clave] = [] })
     fotos.forEach((f) => { if (m[f.categoriaKey]) m[f.categoriaKey].push(f) })
+    for (const clave in m) {
+      m[clave].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true }))
+    }
     return m
   }, [fotos, categorias])
 
