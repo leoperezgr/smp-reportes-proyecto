@@ -22,7 +22,10 @@ export default function PaginaInicio({ reportes, onNuevo, onAbrir, onEliminar, o
             <p className="m-0 text-[11px] text-white/40 font-lexend">Generador de Reportes de Operación</p>
           </div>
         </div>
-        <div className="text-xs text-white/30 font-lexend">Naviera SMP, S.A. de C.V.</div>
+        <div className="flex items-center gap-3 text-xs font-lexend">
+          <span className="text-white/30">Naviera SMP, S.A. de C.V.</span>
+          <span className="text-white/20">v1.1.1</span>
+        </div>
       </div>
 
       <div className="max-w-[1100px] mx-auto px-6 pt-8 pb-16">
