@@ -160,24 +160,28 @@ export async function guardarFotosReporte(reporteId, fotos, fotosPortada) {
   }
 
   // Guardar fotos de bodegas
-  for (const foto of fotos) {
+  for (let i = 0; i < fotos.length; i++) {
+    const foto = fotos[i]
     const blob = foto.archivo instanceof Blob ? foto.archivo : null
     if (blob) {
       await guardarFoto(reporteId, foto.id, blob, {
         categoriaKey: foto.categoriaKey,
         nombre: foto.nombre,
         fotoId: foto.id,
+        orden: i,
       })
     }
   }
 
   // Guardar fotos de portada
-  for (const foto of fotosPortada) {
+  for (let i = 0; i < fotosPortada.length; i++) {
+    const foto = fotosPortada[i]
     const blob = foto.archivo instanceof Blob ? foto.archivo : null
     if (blob) {
       await guardarFotoPortada(reporteId, foto.id, blob, {
         nombre: foto.nombre,
         fotoId: foto.id,
+        orden: i,
       })
     }
   }
@@ -188,6 +192,7 @@ export async function cargarFotosReporte(reporteId) {
     new Promise((r) => { const l = new FileReader(); l.onload = () => r(l.result); l.readAsDataURL(blob) })
 
   const fotosRaw = await cargarFotos(reporteId)
+  fotosRaw.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
   const fotos = []
   for (const f of fotosRaw) {
     const archivo = new File([f.blob], f.nombre || 'foto.jpg', { type: f.blob.type || 'image/jpeg' })
@@ -196,6 +201,7 @@ export async function cargarFotosReporte(reporteId) {
   }
 
   const portadaRaw = await cargarFotosPortada(reporteId)
+  portadaRaw.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
   const fotosPortada = []
   for (const f of portadaRaw) {
     const archivo = new File([f.blob], f.nombre || 'portada.jpg', { type: f.blob.type || 'image/jpeg' })
