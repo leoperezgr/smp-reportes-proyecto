@@ -2,6 +2,14 @@ const { app, BrowserWindow, dialog } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
 
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  app.quit()
+}
+
+let mainWindow = null
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -28,8 +36,15 @@ function createWindow() {
   return win
 }
 
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+})
+
 app.whenReady().then(() => {
-  createWindow()
+  mainWindow = createWindow()
   autoUpdater.checkForUpdatesAndNotify()
 })
 
