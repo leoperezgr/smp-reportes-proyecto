@@ -1,6 +1,9 @@
-const { app, BrowserWindow, dialog } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
+const fs = require('fs')
+const os = require('os')
+const { spawn } = require('child_process')
 
 const gotTheLock = app.requestSingleInstanceLock()
 
@@ -21,6 +24,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   })
 
@@ -46,6 +50,65 @@ app.on('second-instance', () => {
 app.whenReady().then(() => {
   mainWindow = createWindow()
   autoUpdater.checkForUpdatesAndNotify()
+})
+
+// ─── IPC: Convertir .docx a PDF usando Word COM (Windows) ───
+ipcMain.handle('convertir-docx-a-pdf', async (_event, { docxBuffer, nombreBase }) => {
+  if (process.platform !== 'win32') {
+    return { ok: false, error: 'La conversión a PDF solo está disponible en Windows (requiere Microsoft Word).' }
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smp-pdf-'))
+  const safe = (nombreBase || 'reporte').replace(/[^\w.-]/g, '_')
+  const docxPath = path.join(tmpDir, `${safe}.docx`)
+  const pdfPath = path.join(tmpDir, `${safe}.pdf`)
+
+  try {
+    fs.writeFileSync(docxPath, Buffer.from(docxBuffer))
+
+    // Script PowerShell: abre el .docx con Word COM y lo guarda como PDF (wdFormatPDF = 17)
+    const ps = [
+      '$ErrorActionPreference = "Stop"',
+      'try {',
+      '  $word = New-Object -ComObject Word.Application',
+      '  $word.Visible = $false',
+      '  $word.DisplayAlerts = 0',
+      `  $doc = $word.Documents.Open("${docxPath.replace(/\\/g, '\\\\')}", $false, $true)`,
+      `  $doc.SaveAs([ref] "${pdfPath.replace(/\\/g, '\\\\')}", [ref] 17)`,
+      '  $doc.Close($false)',
+      '  $word.Quit()',
+      '  [System.Runtime.Interopservices.Marshal]::ReleaseComObject($doc) | Out-Null',
+      '  [System.Runtime.Interopservices.Marshal]::ReleaseComObject($word) | Out-Null',
+      '  exit 0',
+      '} catch {',
+      '  Write-Error $_.Exception.Message',
+      '  try { if ($word) { $word.Quit() } } catch {}',
+      '  exit 1',
+      '}',
+    ].join('\n')
+
+    await new Promise((resolve, reject) => {
+      const proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true })
+      let stderr = ''
+      proc.stderr.on('data', (d) => { stderr += d.toString() })
+      proc.on('error', reject)
+      proc.on('close', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(stderr.trim() || `PowerShell salió con código ${code}`))
+      })
+    })
+
+    if (!fs.existsSync(pdfPath)) {
+      throw new Error('Word no generó el archivo PDF.')
+    }
+
+    const pdfBytes = fs.readFileSync(pdfPath)
+    return { ok: true, pdf: pdfBytes, nombre: `${safe}.pdf` }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {}
+  }
 })
 
 autoUpdater.on('update-downloaded', () => {

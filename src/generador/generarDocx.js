@@ -1,7 +1,7 @@
 import { DOC, TABLA_EVENTOS, TABLA_CANTIDADES, TABLA_BL, TABLA_STOWAGE, CLIENTE } from '../constantes'
 import { formatearTonelaje, parsearTonelaje, obtenerDimensiones, leerImagen } from '../utilidades'
 
-export default async function generarDocx({ config, operacion, stowage, fotos, fotosPortada }) {
+export default async function generarDocx({ config, operacion, stowage, fotos, fotosPortada, devolverBlob = false }) {
   const {
     Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun,
     Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, PageBreak, VerticalAlign,
@@ -369,6 +369,11 @@ export default async function generarDocx({ config, operacion, stowage, fotos, f
   })
 
   const nombre = `REPORTE_${config.puerto}_${config.consecutivo}-${config.anio}_MV_${(config.buque || 'BUQUE').replace(/\s+/g, '_')}__${config.viaje}_${config.puerto}_IMP.docx`
+
+  if (devolverBlob) {
+    return { blob: blobFinal, nombre }
+  }
+
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blobFinal)
   link.download = nombre

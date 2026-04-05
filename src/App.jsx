@@ -29,6 +29,7 @@ export default function App() {
   const [fotos, setFotos] = useState([])
   const [fotosPortada, setFotosPortada] = useState([])
   const [generando, setGenerando] = useState(false)
+  const [generandoPdf, setGenerandoPdf] = useState(false)
   const [generadoFlag, setGeneradoFlag] = useState(false)
   const [descargandoId, setDescargandoId] = useState(null)
   const [cargando, setCargando] = useState(false)
@@ -185,6 +186,39 @@ export default function App() {
     }
   }
 
+  const manejarGenerarPdf = async () => {
+    if (!window.electronAPI || !window.electronAPI.esElectron) {
+      alert('La generación de PDF solo está disponible en la app de escritorio.')
+      return
+    }
+    if (window.electronAPI.plataforma !== 'win32') {
+      alert('La conversión a PDF requiere Microsoft Word en Windows.')
+      return
+    }
+    setGenerandoPdf(true)
+    try {
+      const { blob, nombre } = await generarDocx({ config, operacion, stowage, fotos, fotosPortada, devolverBlob: true })
+      const docxBuffer = await blob.arrayBuffer()
+      const nombreBase = nombre.replace(/\.docx$/i, '')
+      const resultado = await window.electronAPI.convertirDocxAPdf(docxBuffer, nombreBase)
+      if (!resultado.ok) {
+        throw new Error(resultado.error || 'No se pudo generar el PDF')
+      }
+      const pdfBlob = new Blob([resultado.pdf], { type: 'application/pdf' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(pdfBlob)
+      link.download = resultado.nombre
+      link.click()
+      URL.revokeObjectURL(link.href)
+      setGeneradoFlag(true)
+    } catch (err) {
+      console.error(err)
+      alert('Error al generar PDF: ' + err.message)
+    } finally {
+      setGenerandoPdf(false)
+    }
+  }
+
   // ─── Vista: Homepage ───
   if (vista === 'inicio') {
     return <PaginaInicio
@@ -268,7 +302,7 @@ export default function App() {
         {paso === 1 && <PasoOperacion operacion={operacion} setOperacion={setOperacion} />}
         {paso === 2 && <PasoStowage stowage={stowage} setStowage={setStowage} />}
         {paso === 3 && <PasoFotos fotos={fotos} setFotos={setFotos} fotosPortada={fotosPortada} setFotosPortada={setFotosPortada} numBodegas={stowage.bodegas.length} />}
-        {paso === 4 && <PasoGenerar config={config} operacion={operacion} stowage={stowage} fotos={fotos} fotosPortada={fotosPortada} generando={generando} onGenerar={manejarGenerar} />}
+        {paso === 4 && <PasoGenerar config={config} operacion={operacion} stowage={stowage} fotos={fotos} fotosPortada={fotosPortada} generando={generando} onGenerar={manejarGenerar} generandoPdf={generandoPdf} onGenerarPdf={manejarGenerarPdf} />}
 
         {/* Navegación inferior */}
         <div className="flex justify-between mt-8 pt-5 border-t border-gray-100">

@@ -1,8 +1,10 @@
-import { Eye, Camera, Download, Ship } from 'lucide-react'
+import { Eye, Camera, Download, Ship, FileText } from 'lucide-react'
 import { parsearTonelaje, formatearTonelaje } from '../utilidades'
 import { Tarjeta, Boton } from './ui'
 
-export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, generando, onGenerar }) {
+export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, generando, onGenerar, generandoPdf, onGenerarPdf }) {
+  const hayElectron = typeof window !== 'undefined' && window.electronAPI && window.electronAPI.esElectron
+  const esWindows = hayElectron && window.electronAPI.plataforma === 'win32'
   const nombre = `REPORTE_${config.puerto}_${config.consecutivo}-${config.anio}_MV_${(config.buque || 'BUQUE').replace(/\s+/g, '_')}__${config.viaje}_${config.puerto}_IMP.docx`
   const pags = (() => {
     let p = 3
@@ -54,9 +56,32 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
             <Chk ok={fotos.length > 0} t={`${fotos.length} fotos de bodegas`} />
           </div>
         </div>
-        <Boton onClick={onGenerar} deshabilitado={generando} icono={generando ? null : <Download size={18} />} className="!w-full !py-4 !text-base !rounded-xl">
+        <Boton onClick={onGenerar} deshabilitado={generando || generandoPdf} icono={generando ? null : <Download size={18} />} className="!w-full !py-4 !text-base !rounded-xl">
           {generando ? 'Generando documento...' : 'Generar Reporte .docx'}
         </Boton>
+        <div className="mt-3">
+          <Boton
+            onClick={onGenerarPdf}
+            deshabilitado={generando || generandoPdf || !esWindows}
+            variante="secundario"
+            icono={generandoPdf ? null : <FileText size={18} />}
+            className="!w-full !py-4 !text-base !rounded-xl"
+          >
+            {generandoPdf ? 'Generando PDF con Word...' : 'Generar Reporte .pdf'}
+          </Boton>
+          {!esWindows && (
+            <p className="text-[11px] text-gray-400 text-center mt-2 font-lexend">
+              {hayElectron
+                ? 'La generación de PDF requiere Windows con Microsoft Word instalado.'
+                : 'La generación de PDF solo está disponible en la app de escritorio.'}
+            </p>
+          )}
+          {esWindows && (
+            <p className="text-[11px] text-gray-400 text-center mt-2 font-lexend">
+              El PDF se genera con Microsoft Word (fidelidad 100% al .docx). Puede tardar unos segundos.
+            </p>
+          )}
+        </div>
       </Tarjeta>
       <Tarjeta titulo="Preview del Documento" subtitulo={`${pags} páginas estimadas`} icono={<Camera size={22} />}>
         {(() => {
