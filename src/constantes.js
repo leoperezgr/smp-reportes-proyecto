@@ -60,6 +60,8 @@ export const TABLA_EVENTOS = { cols: [4416, 4412], total: 8828 }
 export const TABLA_CANTIDADES = { cols: [4600, 1035, 978, 2215], total: 8828 }
 export const TABLA_BL = { cols: [2802, 2976, 993, 2348], total: 9119 }
 export const TABLA_STOWAGE = { cols: [1701, 2976, 2348], total: 7025 }
+export const TABLA_PARTIDAS = { cols: [2800, 2200, 2200, 1628], total: 8828 }
+export const TABLA_EXISTENCIAS = { cols: [2943, 2943, 2942], total: 8828 }
 
 // Datos fijos de DEACERO
 export const CLIENTE = {
@@ -72,17 +74,22 @@ export const CLIENTE = {
 // Valores iniciales de estado
 export const configInicial = () => ({
   puerto: 'VER', consecutivo: '001', anio: String(new Date().getFullYear()),
-  buque: '', viaje: 'V01',
+  buque: '', viaje: 'V01', tipoOperacion: 'IMP',
 })
 
-export const operacionInicial = () => ({
+export const blImpInicial = () => ({ numero: 'BL-001', puerto: '', piezas: '1', tonelaje: '' })
+export const blExpInicial = (n = 1) => ({ numero: `BL-${String(n).padStart(3, '0')}`, ciudad: '', puerto: '', pais: '', cantidades: [{ descripcion: '', tipo: 'BUNDLES', piezas: '1', tonelaje: '' }] })
+
+export const operacionInicial = (tipo = 'IMP') => ({
   arriboA: '',
   eventos: EVENTOS.map((n) => ({ nombre: n, mes: '', dia: '', anio: String(new Date().getFullYear()), hora: '' })),
   cargaTotal: '',
   puertoOrigen: '',
   paisOrigen: '',
   cantidades: [{ descripcion: '', tipo: 'LOTE', piezas: '1', tonelaje: '' }],
-  bls: [{ numero: 'BL-001', puerto: '', piezas: '1', tonelaje: '' }],
+  bls: tipo === 'EXP'
+    ? [blExpInicial(1), blExpInicial(2)]
+    : [blImpInicial()],
 })
 
 export const stowageInicial = () => ({
@@ -90,4 +97,12 @@ export const stowageInicial = () => ({
     numero: `No ${String(i + 1).padStart(2, '0')}`, producto: '', tonelaje: '0.000',
   })),
   observaciones: '',
+})
+
+export const exportacionInicial = () => ({
+  partidas: [
+    { etiqueta: 'PRIMERA ENTRADA AL PUERTO', fechaArribo: '', fechaCarga: '' },
+    { etiqueta: 'ULTIMO ENTRADA AL PUERTO', fechaArribo: '', fechaCarga: '' },
+  ],
+  existencias: [{ dia: '', tonelaje: '', porcentaje: '' }],
 })

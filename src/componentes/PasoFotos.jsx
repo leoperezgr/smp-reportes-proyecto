@@ -4,19 +4,23 @@ import { SECCIONES_EXTRA } from '../constantes'
 import { uid, leerComoDataURL } from '../utilidades'
 import { Tarjeta, Boton } from './ui'
 
-export default function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas }) {
+export default function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPortada, numBodegas, config }) {
   const inputRef = useRef(null)
   const inputPortadaRef = useRef(null)
   const [bodegaSel, setBodegaSel] = useState(0)
   const [arrastrado, setArrastrado] = useState(null)
   const [sobre, setSobre] = useState(null)
+  const [portadaArrastrada, setPortadaArrastrada] = useState(null)
+  const esExp = config?.tipoOperacion === 'EXP'
 
   const categorias = useMemo(() => {
     const cats = []
+    if (esExp) cats.push({ tipo: 'seccion', nombre: 'BODEGAS', clave: 'seccion-BODEGAS', etiqueta: 'Carga en Bodegas de Buque' })
     for (let i = 1; i <= numBodegas; i++) cats.push({ tipo: 'bodega', numero: i, clave: `bodega-${i}`, etiqueta: `Bodega ${i}` })
-    SECCIONES_EXTRA.forEach((s) => cats.push({ tipo: 'seccion', nombre: s, clave: `seccion-${s}`, etiqueta: s }))
+    const seccionesExcluidas = esExp ? ['DESCARGA DE BUQUE', 'CARGA DE EQUIPO FFCC'] : []
+    SECCIONES_EXTRA.filter((s) => !seccionesExcluidas.includes(s)).forEach((s) => cats.push({ tipo: 'seccion', nombre: s, clave: `seccion-${s}`, etiqueta: s }))
     return cats
-  }, [numBodegas])
+  }, [numBodegas, esExp])
 
   const fotosPorCat = useMemo(() => {
     const m = {}; categorias.forEach((c) => { m[c.clave] = [] })
@@ -67,10 +71,16 @@ export default function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPorta
       <Tarjeta titulo="Fotos de Portada" subtitulo="2 fotos del buque para la primera página" icono={<Ship size={22} />}>
         <div className="flex gap-4 flex-wrap items-center">
           {fotosPortada.map((f, i) => (
-            <div key={f.id} className="relative rounded-xl overflow-hidden border-2 border-gray-200">
-              <img src={f.dataUrl} alt={`Portada ${i + 1}`} className="w-60 h-[150px] object-cover" />
-              <div className="absolute top-1.5 left-1.5 bg-accent text-white px-2 py-0.5 rounded-md text-[11px] font-bold font-lexend">Portada {i + 1}</div>
-              <button onClick={() => setFotosPortada((p) => p.filter((_, j) => j !== i))} className="absolute top-1.5 right-1.5 bg-black/60 text-white border-none rounded-md w-[26px] h-[26px] cursor-pointer flex items-center justify-center text-sm hover:bg-black/80">×</button>
+            <div key={f.id} draggable className="relative rounded-xl overflow-hidden border-2 border-gray-200 cursor-grab active:cursor-grabbing select-none"
+              onDragStart={() => setPortadaArrastrada(i)}
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-accent') }}
+              onDragLeave={(e) => { e.currentTarget.classList.remove('ring-2', 'ring-accent') }}
+              onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('ring-2', 'ring-accent'); if (portadaArrastrada !== null && portadaArrastrada !== i) setFotosPortada([fotosPortada[1], fotosPortada[0]]); setPortadaArrastrada(null) }}
+              onDragEnd={() => setPortadaArrastrada(null)}
+            >
+              <img src={f.dataUrl} alt={`Portada ${i + 1}`} className="w-60 h-[150px] object-cover pointer-events-none" />
+              <div className="absolute top-1.5 left-1.5 bg-accent text-white px-2 py-0.5 rounded-md text-[11px] font-bold font-lexend flex items-center gap-1"><GripVertical size={12} />Portada {i + 1}</div>
+              <button onClick={() => setFotosPortada((p) => p.filter((_, j) => j !== i))} className="absolute top-1.5 right-1.5 bg-black/60 text-white border-none rounded-md w-[26px] h-[26px] cursor-pointer flex items-center justify-center text-sm hover:bg-black/80"><Trash2 size={14} /></button>
             </div>
           ))}
           {fotosPortada.length < 2 && (

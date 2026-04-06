@@ -2,23 +2,41 @@ import { Eye, Camera, Download, Ship, FileText } from 'lucide-react'
 import { parsearTonelaje, formatearTonelaje } from '../utilidades'
 import { Tarjeta, Boton } from './ui'
 
-export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPortada, generando, onGenerar, generandoPdf, onGenerarPdf }) {
+export default function PasoGenerar({ config, operacion, stowage, exportacion, fotos, fotosPortada, generando, onGenerar, generandoPdf, onGenerarPdf }) {
   const hayElectron = typeof window !== 'undefined' && window.electronAPI && window.electronAPI.esElectron
   const esWindows = hayElectron && window.electronAPI.plataforma === 'win32'
-  const nombre = `REPORTE_${config.puerto}_${config.consecutivo}-${config.anio}_MV_${(config.buque || 'BUQUE').replace(/\s+/g, '_')}__${config.viaje}_${config.puerto}_IMP.docx`
+  const esExp = config.tipoOperacion === 'EXP'
+  const sufijo = esExp ? 'EXP' : 'IMP'
+  const nombre = `REPORTE_${config.puerto}_${config.consecutivo}-${config.anio}_MV_${(config.buque || 'BUQUE').replace(/\s+/g, '_')}__${config.viaje}_${config.puerto}_${sufijo}.docx`
   const pags = (() => {
-    let p = 3
+    let p = esExp ? 3 : 3 // portada + operación + stowage/obs (o obs en EXP)
+    if (esExp) p += 1 // página extra de partidas/existencia
     const fpc = {}
     for (const f of fotos) { if (!fpc[f.categoriaKey]) fpc[f.categoriaKey] = []; fpc[f.categoriaKey].push(f) }
     const bodegas = stowage.bodegas.map((_, i) => `bodega-${i + 1}`)
-    const secciones = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-CARGA DE EQUIPO FFCC', 'seccion-DOCUMENTOS']
-    for (const cat of [...bodegas, ...secciones]) {
-      const g = fpc[cat] || []
-      const bi = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
-      const esEmpty = bi >= 0 && g.length === 0
-      if (esEmpty) { p += 1; continue }
-      if (g.length === 0) continue
-      p += cat === 'seccion-DOCUMENTOS' ? g.length : Math.ceil(g.length / 2)
+    const secciones = esExp
+      ? ['seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
+      : ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-CARGA DE EQUIPO FFCC', 'seccion-DOCUMENTOS']
+
+    if (esExp) {
+      // En EXP, seccion-BODEGAS + bodegas numeradas van en una sola sección
+      let totalBodega = (fpc['seccion-BODEGAS'] || []).length
+      for (const cat of bodegas) totalBodega += (fpc[cat] || []).length
+      if (totalBodega > 0) p += Math.ceil(totalBodega / 2)
+      for (const cat of secciones) {
+        const g = fpc[cat] || []
+        if (g.length === 0) continue
+        p += cat === 'seccion-DOCUMENTOS' ? g.length : Math.ceil(g.length / 2)
+      }
+    } else {
+      for (const cat of [...bodegas, ...secciones]) {
+        const g = fpc[cat] || []
+        const bi = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
+        const esEmpty = bi >= 0 && g.length === 0
+        if (esEmpty) { p += 1; continue }
+        if (g.length === 0) continue
+        p += cat === 'seccion-DOCUMENTOS' ? g.length : Math.ceil(g.length / 2)
+      }
     }
     return p
   })()
@@ -32,7 +50,7 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
           {[
             ['Código', `${config.puerto}-LP-${config.consecutivo}-${config.anio}`],
             ['Buque', `MV ${config.buque || '—'} ${config.viaje}`],
-            ['Cliente', 'DEACERO SAPI DE CV'],
+            ['Tipo', esExp ? 'Exportación' : 'Importación'],
             ['Fotos', `${fotosPortada.length} portada + ${fotos.length} bodegas`],
           ].map(([l, v]) => (
             <div key={l} className="p-4 bg-gray-50 rounded-xl">
@@ -51,9 +69,10 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
             <Chk ok={fotosPortada.length === 2} t="2 fotos de portada" />
             <Chk ok={!!config.buque} t="Nombre del buque" />
             <Chk ok={operacion.eventos.some((e) => e.mes)} t="Fechas de operación" />
-            <Chk ok={stowage.bodegas.some((b) => parsearTonelaje(b.tonelaje) > 0)} t="Stowage plan" />
+            {!esExp && <Chk ok={stowage.bodegas.some((b) => parsearTonelaje(b.tonelaje) > 0)} t="Stowage plan" />}
             <Chk ok={!!stowage.observaciones} t="Observaciones" />
             <Chk ok={fotos.length > 0} t={`${fotos.length} fotos de bodegas`} />
+            {esExp && <Chk ok={exportacion && exportacion.partidas.some((p) => p.fechaArribo)} t="Partidas en patios" />}
           </div>
         </div>
         <Boton onClick={onGenerar} deshabilitado={generando || generandoPdf} icono={generando ? null : <Download size={18} />} className="!w-full !py-4 !text-base !rounded-xl">
@@ -89,11 +108,13 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
 
           paginas.push({ tipo: 'portada', fotos: fotosPortada })
           paginas.push({ tipo: 'datos' })
-          paginas.push({ tipo: 'stowage' })
+          paginas.push({ tipo: esExp ? 'observaciones' : 'stowage' })
+          if (esExp) paginas.push({ tipo: 'partidas' })
 
           const bodegasDelStowage = stowage.bodegas.map((_, idx) => `bodega-${idx + 1}`)
-          const seccionesOrdenadas = ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-CARGA DE EQUIPO FFCC', 'seccion-DOCUMENTOS']
-          const todasCats = [...bodegasDelStowage, ...seccionesOrdenadas]
+          const seccionesOrdenadas = esExp
+            ? ['seccion-AREA DE ALMACENAMIENTO', 'seccion-DOCUMENTOS']
+            : ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-CARGA DE EQUIPO FFCC', 'seccion-DOCUMENTOS']
 
           const fotosPorCat = {}
           for (const f of fotos) {
@@ -101,32 +122,58 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
             fotosPorCat[f.categoriaKey].push(f)
           }
 
-          for (const cat of todasCats) {
-            const fotosGrupo = fotosPorCat[cat] || []
-            const bodegaIdx = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
-            const esEmpty = bodegaIdx >= 0 && fotosGrupo.length === 0
-            const titulo = cat.startsWith('bodega-')
-              ? `BODEGA No ${cat.replace('bodega-', '').padStart(2, '0')}`
-              : cat.replace('seccion-', '')
-            const esDoc = cat === 'seccion-DOCUMENTOS'
-
-            if (esEmpty) {
-              paginas.push({ tipo: 'empty', titulo })
-              continue
+          if (esExp) {
+            // Agrupar seccion-BODEGAS + todas las bodegas numeradas en una
+            const fotosTodasBodegas = []
+            if (fotosPorCat['seccion-BODEGAS']) fotosTodasBodegas.push(...fotosPorCat['seccion-BODEGAS'])
+            for (const cat of bodegasDelStowage) {
+              if (fotosPorCat[cat]) fotosTodasBodegas.push(...fotosPorCat[cat])
             }
-            if (fotosGrupo.length === 0) continue
+            const catsPreview = fotosTodasBodegas.length > 0
+              ? [{ cat: 'bodegas-exp', fotos: fotosTodasBodegas }, ...seccionesOrdenadas.map((c) => ({ cat: c, fotos: fotosPorCat[c] || [] }))]
+              : seccionesOrdenadas.map((c) => ({ cat: c, fotos: fotosPorCat[c] || [] }))
 
-            let i = 0
-            let primera = true
-            while (i < fotosGrupo.length) {
-              if (esDoc) {
-                paginas.push({ tipo: 'foto-doc', titulo: primera ? titulo : null, foto: fotosGrupo[i] })
-                i += 1
-              } else {
-                paginas.push({ tipo: 'foto-par', titulo: primera ? titulo : null, f1: fotosGrupo[i], f2: fotosGrupo[i + 1] || null })
-                i += 2
+            for (const { cat, fotos: fotosGrupo } of catsPreview) {
+              if (fotosGrupo.length === 0) continue
+              const titulo = cat === 'bodegas-exp' ? 'CARGA EN BODEGAS DE BUQUE' : cat.replace('seccion-', '')
+              const esDoc = cat === 'seccion-DOCUMENTOS'
+              let i = 0, primera = true
+              while (i < fotosGrupo.length) {
+                if (esDoc) {
+                  paginas.push({ tipo: 'foto-doc', titulo: primera ? titulo : null, foto: fotosGrupo[i] })
+                  i += 1
+                } else {
+                  paginas.push({ tipo: 'foto-par', titulo: primera ? titulo : null, f1: fotosGrupo[i], f2: fotosGrupo[i + 1] || null })
+                  i += 2
+                }
+                primera = false
               }
-              primera = false
+            }
+          } else {
+            const todasCats = [...bodegasDelStowage, ...seccionesOrdenadas]
+            for (const cat of todasCats) {
+              const fotosGrupo = fotosPorCat[cat] || []
+              const bodegaIdx = cat.startsWith('bodega-') ? parseInt(cat.replace('bodega-', '')) - 1 : -1
+              const esEmpty = bodegaIdx >= 0 && fotosGrupo.length === 0
+              const titulo = cat.startsWith('bodega-')
+                ? `BODEGA No ${cat.replace('bodega-', '').padStart(2, '0')}`
+                : cat.replace('seccion-', '')
+              const esDoc = cat === 'seccion-DOCUMENTOS'
+
+              if (esEmpty) { paginas.push({ tipo: 'empty', titulo }); continue }
+              if (fotosGrupo.length === 0) continue
+
+              let i = 0, primera = true
+              while (i < fotosGrupo.length) {
+                if (esDoc) {
+                  paginas.push({ tipo: 'foto-doc', titulo: primera ? titulo : null, foto: fotosGrupo[i] })
+                  i += 1
+                } else {
+                  paginas.push({ tipo: 'foto-par', titulo: primera ? titulo : null, f1: fotosGrupo[i], f2: fotosGrupo[i + 1] || null })
+                  i += 2
+                }
+                primera = false
+              }
             }
           }
 
@@ -144,7 +191,7 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
           paginas.forEach((p, idx) => {
             const num = idx + 1
             let seccion = null
-            if (p.tipo === 'portada' || p.tipo === 'datos' || p.tipo === 'stowage') seccion = 'info'
+            if (p.tipo === 'portada' || p.tipo === 'datos' || p.tipo === 'stowage' || p.tipo === 'observaciones' || p.tipo === 'partidas') seccion = 'info'
             else if (p.titulo) seccion = p.titulo
             else seccion = seccionActual
 
@@ -194,6 +241,30 @@ export default function PasoGenerar({ config, operacion, stowage, fotos, fotosPo
                     <div className="h-2 bg-accent/10 rounded-[2px]" />
                   </div>
                   <div className="text-[7px] text-gray-400 text-center mt-2">Observaciones</div>
+                </MiniPag>
+              )})
+            } else if (p.tipo === 'observaciones') {
+              elementos.push({ tipo: 'pagina', contenido: (
+                <MiniPag key={idx} num={num}>
+                  <div className="text-[8px] font-bold text-navy text-center mb-2 font-lexend">BL + OBS</div>
+                  <div className="space-y-1 px-2">
+                    {[1,2].map(t => <div key={t} className="h-2 bg-gray-100 rounded-[2px]" />)}
+                    <div className="h-0.5 bg-orange-400 my-1 rounded-full" />
+                    <div className="h-6 bg-gray-50 rounded-[2px]" />
+                  </div>
+                </MiniPag>
+              )})
+            } else if (p.tipo === 'partidas') {
+              elementos.push({ tipo: 'pagina', contenido: (
+                <MiniPag key={idx} num={num} destacar>
+                  <div className="text-[8px] font-bold text-accent text-center mb-2 font-lexend">PARTIDAS</div>
+                  <div className="space-y-1 px-2">
+                    <div className="h-0.5 bg-yellow-400 rounded-full" />
+                    {[1,2].map(t => <div key={t} className="h-2 bg-gray-100 rounded-[2px]" />)}
+                    <div className="h-3" />
+                    <div className="h-0.5 bg-yellow-400 rounded-full" />
+                    {[1].map(t => <div key={t} className="h-2 bg-gray-100 rounded-[2px]" />)}
+                  </div>
                 </MiniPag>
               )})
             } else if (p.tipo === 'empty') {

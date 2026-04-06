@@ -409,7 +409,7 @@ Ejemplo: `REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
 - **Empresa**: Naviera SMP, S.A. de C.V.
 - **Web**: https://navierasmp.com.mx/
 - **Usuario final**: Operador portuario (nivel técnico bajo, usa desktop Windows)
-- **Versión**: 1.1.5
+- **Versión**: 1.2.0
 - **Documento de referencia**: `referencia/REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
 
 ---
