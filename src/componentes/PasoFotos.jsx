@@ -15,7 +15,7 @@ export default function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPorta
 
   const categorias = useMemo(() => {
     const cats = []
-    if (esExp) cats.push({ tipo: 'seccion', nombre: 'BODEGAS', clave: 'seccion-BODEGAS', etiqueta: 'Carga en Bodegas de Buque' })
+    if (esExp) cats.push({ tipo: 'seccion', nombre: 'BODEGAS', clave: 'seccion-BODEGAS', etiqueta: 'CARGA EN BODEGAS DE BUQUE' })
     for (let i = 1; i <= numBodegas; i++) cats.push({ tipo: 'bodega', numero: i, clave: `bodega-${i}`, etiqueta: `Bodega ${i}` })
     const seccionesExcluidas = esExp ? ['DESCARGA DE BUQUE', 'CARGA DE EQUIPO FFCC'] : []
     SECCIONES_EXTRA.filter((s) => !seccionesExcluidas.includes(s)).forEach((s) => cats.push({ tipo: 'seccion', nombre: s, clave: `seccion-${s}`, etiqueta: s }))
@@ -84,8 +84,12 @@ export default function PasoFotos({ fotos, setFotos, fotosPortada, setFotosPorta
             </div>
           ))}
           {fotosPortada.length < 2 && (
-            <label className="w-60 h-[150px] border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer text-gray-400 gap-2 hover:border-accent hover:text-accent transition-colors">
-              <Upload size={28} /><span className="text-[13px] font-lexend">Subir foto del buque</span>
+            <label
+              onDrop={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('border-accent', 'text-accent', 'bg-orange-50'); procesarPortada(Array.from(e.dataTransfer.files)) }}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('border-accent', 'text-accent', 'bg-orange-50') }}
+              onDragLeave={(e) => { e.currentTarget.classList.remove('border-accent', 'text-accent', 'bg-orange-50') }}
+              className="w-60 h-[150px] border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer text-gray-400 gap-2 hover:border-accent hover:text-accent transition-colors">
+              <Upload size={28} /><span className="text-[13px] font-lexend">Arrastra o haz clic</span>
               <input ref={inputPortadaRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => procesarPortada(Array.from(e.target.files))} />
             </label>
           )}

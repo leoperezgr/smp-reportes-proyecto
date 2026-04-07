@@ -92,8 +92,8 @@ export const operacionInicial = (tipo = 'IMP') => ({
     : [blImpInicial()],
 })
 
-export const stowageInicial = () => ({
-  bodegas: Array.from({ length: 5 }, (_, i) => ({
+export const stowageInicial = (tipo = 'IMP') => ({
+  bodegas: Array.from({ length: tipo === 'EXP' ? 1 : 5 }, (_, i) => ({
     numero: `No ${String(i + 1).padStart(2, '0')}`, producto: '', tonelaje: '0.000',
   })),
   observaciones: '',

@@ -92,7 +92,7 @@ export default function App() {
     const id = uid()
     const nuevoConfig = { ...configInicial(), tipoOperacion: tipo }
     const nuevoOp = operacionInicial(tipo)
-    const nuevoStow = stowageInicial()
+    const nuevoStow = stowageInicial(tipo)
     const nuevoExp = exportacionInicial()
     guardarReporte(id, { config: nuevoConfig, operacion: nuevoOp, stowage: nuevoStow, exportacion: nuevoExp, pasoActual: 0, generado: false })
     const entrada = {

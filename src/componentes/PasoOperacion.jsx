@@ -1,6 +1,7 @@
 import { Clock, List, FileText, Trash2, Plus, Package } from 'lucide-react'
 import { MESES, blExpInicial } from '../constantes'
 import { actualizarProfundo, formatearHora, formatearTonelaje, parsearTonelaje } from '../utilidades'
+
 import { Tarjeta, Entrada, Boton } from './ui'
 
 export default function PasoOperacion({ operacion, setOperacion, config }) {
@@ -118,7 +119,7 @@ export default function PasoOperacion({ operacion, setOperacion, config }) {
                     return { ...p, bls: nuevos }
                   })}>Agregar producto</Boton>
                   <div className="text-xs font-lexend text-gray-500">
-                    Total: <strong className="text-navy">{totalPiezas} pzas</strong> / <strong className="text-accent">{formatearTonelaje(totalTonelaje)} MT</strong>
+                    Total: <strong className="text-navy">{totalPiezas.toLocaleString()} pzas</strong> / <strong className="text-accent">{formatearTonelaje(totalTonelaje)} MT</strong>
                   </div>
                 </div>
               </Tarjeta>
@@ -148,7 +149,7 @@ export default function PasoOperacion({ operacion, setOperacion, config }) {
                       <tr key={i} className="border-b border-gray-100">
                         <td className="px-3 py-2.5 font-semibold text-navy font-lexend text-xs">{`BL ${String(i + 1).padStart(3, '0')} FORMAMOS ACERO`}</td>
                         <td className="px-3 py-2.5 text-center text-xs">{puertoPais}</td>
-                        <td className="px-3 py-2.5 text-center text-xs font-semibold">{totalPiezas}</td>
+                        <td className="px-3 py-2.5 text-center text-xs font-semibold">{totalPiezas.toLocaleString()}</td>
                         <td className="px-3 py-2.5 text-center text-xs font-semibold">{totalTonelaje}</td>
                       </tr>
                     )
@@ -156,7 +157,7 @@ export default function PasoOperacion({ operacion, setOperacion, config }) {
                   <tr className="bg-accent-light font-bold">
                     <td className="px-3 py-2.5 text-accent font-lexend">TOTALES</td>
                     <td />
-                    <td className="px-3 py-2.5 text-accent font-lexend text-center">{operacion.bls.reduce((s, bl) => s + (bl.cantidades || []).reduce((s2, c) => s2 + (parseInt(c.piezas) || 0), 0), 0)}</td>
+                    <td className="px-3 py-2.5 text-accent font-lexend text-center">{operacion.bls.reduce((s, bl) => s + (bl.cantidades || []).reduce((s2, c) => s2 + (parseInt(c.piezas) || 0), 0), 0).toLocaleString()}</td>
                     <td className="px-3 py-2.5 text-accent font-lexend text-center">{formatearTonelaje(operacion.bls.reduce((s, bl) => s + (bl.cantidades || []).reduce((s2, c) => s2 + parsearTonelaje(c.tonelaje), 0), 0))}</td>
                   </tr>
                 </tbody>

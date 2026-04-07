@@ -13,8 +13,13 @@ export const validarPaso = (indicePaso, { config, operacion, stowage, fotos, fot
       break
     }
     case 2: {
-      const tieneBodega = stowage.bodegas.some((b) => b.producto.trim() && parsearTonelaje(b.tonelaje) > 0)
-      if (!tieneBodega) faltantes.push('Al menos 1 bodega con producto y tonelaje')
+      const esExp = config && config.tipoOperacion === 'EXP'
+      if (esExp) {
+        if (!stowage.observaciones || !stowage.observaciones.trim()) faltantes.push('Observaciones')
+      } else {
+        const tieneBodega = stowage.bodegas.some((b) => b.producto.trim() && parsearTonelaje(b.tonelaje) > 0)
+        if (!tieneBodega) faltantes.push('Al menos 1 bodega con producto y tonelaje')
+      }
       break
     }
     case 3:

@@ -319,8 +319,12 @@ El cliente siempre es **DEACERO**. Header y footer vienen directamente del archi
 
 ### Página 2 — Datos de Operación
 
-**Tabla 1: Eventos** (4416 + 4412 = 8828 DXA)
-- 2 columnas: Evento | Datos (mes, día, año, hora en texto corrido)
+El contenido varía según el modo (IMP vs EXP):
+
+#### Modo IMP (Importación)
+
+**Tabla 1: Eventos** (5 columnas: 4416 + 1300 + 700 + 900 + 1512 = 8828 DXA)
+- Columnas: Evento | Mes | Día | Año | Hora
 - 5 filas de eventos + 1 fila de CARGA TOTAL
 
 **Tabla 2: Cantidades Recibidas** (4600 + 1035 + 978 + 2215 = 8828 DXA)
@@ -331,9 +335,21 @@ El cliente siempre es **DEACERO**. Header y footer vienen directamente del archi
 - Headers: NUMERO DE BL | PUERTO | PIEZAS | TONELAJE (MT)
 - Fila de TOTALES al final
 
-**Nota**: Las tablas incluyen filas separadoras con color (amarillo FFFF00, naranja FFC000) entre secciones.
+#### Modo EXP (Exportación)
 
-### Página 3 — Stowage Plan + Observaciones
+**Tabla 1: Eventos** — misma estructura que IMP
+
+**Tablas de BL** (por cada BL): columnas anchas con layout fijo y centrado con indent negativo
+- Columnas: 7200 + 1200 + 900 + 1500 = 10800 DXA (desborda márgenes intencionalmente, centrada)
+- `TableLayoutType.FIXED` para evitar auto-ajuste de Word
+- Título: "FORMAMOS ACERO {CIUDAD} BL {NNN}   ({PUERTO} , {PAIS})" — bold centrado
+- Headers: DESCRIPCION DEL PRODUCTO | TIPO | PIEZA | TONELAJE (MT)
+- Piezas formateadas con coma de miles (ej: `1,959`)
+- Filas separadoras: amarillo (FFFF00) después del header, naranja (FFC000) antes del TOTAL
+
+### Página 3
+
+#### Modo IMP: Stowage Plan + Observaciones
 
 **Tabla 4: Stowage Plan** (1701 + 2976 + 2348 = 7025 DXA)
 - Headers: BODEGA | PRODUCTO | TONELAJE (MT)
@@ -344,30 +360,56 @@ Después de la tabla:
 - Título "OBSERVACIONES:" — bold
 - Texto largo libre (párrafo continuo)
 
-### Páginas 4-34+ — Fotos de Bodegas
+#### Modo EXP: Gran Total + BLs + Observaciones
 
+**Tabla Gran Total / BLs** (2802 + 2976 + 993 + 2348 = 9119 DXA)
+- Headers: NUMERO DE BL | PUERTO | PIEZAS | TONELAJE (MT)
+- Piezas con coma de miles
+
+Después: OBSERVACIONES (mismo formato que IMP)
+
+### Página extra EXP: Partidas + Existencia de Carga
+
+Solo en modo EXP, después de observaciones:
+
+**Tabla: TIEMPO DE PARTIDAS EN PATIOS** (3400 + 2600 + 2600 + 2200 = 10800 DXA)
+- Layout fijo, centrada con indent negativo
+- Columnas: Etiqueta | FECHA ARRIBO | FECHA DE CARGA | ESTADIA EN PUERTO
+- Estadía calculada de forma inclusiva (+1 día)
+- Filas separadoras: amarillo + naranja
+
+**Tabla: EXISTENCIA DE CARGA** (2943 + 2943 + 2942 = 8828 DXA)
+- Columnas: DIA | TONELAJE EN PUERTO | % BUQUE
+- Filas separadoras: amarillo + naranja
+
+### Páginas de Fotos
+
+#### Modo IMP
 Cada grupo de bodega empieza con:
 - Título centrado: "BODEGA No XX" — Calibri bold 14pt
+- Si una bodega no tiene fotos: página con "EMPTY" centrado
 
+#### Modo EXP
+- Título único: "CARGA EN BODEGAS DE BUQUE" — todas las fotos de bodegas agrupadas
+- Bodegas sin fotos se omiten (no genera página EMPTY)
+
+#### Ambos modos
 Cada página tiene:
 - 2 fotos apiladas verticalmente, centradas
 - Ancho de cada foto: **5,612,130 EMU** (constante)
 - Alto: proporcional al aspect ratio de la imagen original
-- Debajo de cada foto: label "Bodega X" en naranja bold
 
-Secciones adicionales después de las bodegas (en este orden):
-1. "DESCARGA DE BUQUE" — fotos de la descarga
-2. "AREA DE ALMACENAMIENTO" — fotos del almacén
-3. "CARGA DE BUQUE" — fotos de la carga
-4. "DOCUMENTOS" — fotos de documentación (incluye Statements of Facts como fotos escaneadas)
+Secciones adicionales después de las bodegas:
+- **IMP**: DESCARGA DE BUQUE → AREA DE ALMACENAMIENTO → CARGA DE EQUIPO FFCC → DOCUMENTOS
+- **EXP**: AREA DE ALMACENAMIENTO → DOCUMENTOS
 
 ---
 
 ## Reglas de generación del .docx
 
-1. Lógica concentrada en `src/generador/generarDocx.js`
+1. Lógica separada por modo: `generarDocx.js` (entry point) → `generarDocxImp.js` / `generarDocxExp.js` + `comun.js` (compartido)
 2. Usar librería `docx` de npm para generar el body, y `jszip` para post-procesar con el template
-3. Importar: `Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun, Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, PageBreak, VerticalAlign`
+3. Importar: `Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun, Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, PageBreak, VerticalAlign, TableLayoutType`
 4. Tablas: siempre usar `WidthType.DXA`, nunca `WidthType.PERCENTAGE`
 5. Tablas: poner AMBOS `columnWidths` en la tabla Y `width` en cada celda
 6. Sombreado: usar `ShadingType.CLEAR`, nunca `SOLID`
@@ -380,16 +422,22 @@ Secciones adicionales después de las bodegas (en este orden):
 13. Tamaños de fotos en el .docx (píxeles a 96 DPI): portada 590px ancho, bodegas 590px ancho (2 por página), documentos 545px ancho (1 por página)
 14. `Packer.toBlob()` para generar y descargar con file-saver o link temporal
 15. Bordes de tabla: `size: 4`
+16. Tablas EXP anchas: usar `TableLayoutType.FIXED` + indent negativo para centrar tablas que desbordan márgenes
+17. Modo EXP no genera páginas EMPTY para bodegas sin fotos
+18. Piezas en tablas EXP siempre con coma de miles via `.toLocaleString()`
+19. Estadía en PARTIDAS: cálculo inclusivo (sumar 1 día al resultado de la diferencia de fechas)
 
 ---
 
 ## Nombre del archivo generado
 
 ```
-REPORTE_{PUERTO}_{CONSECUTIVO}-{AÑO}_MV_{BUQUE}__V01_{PUERTO}_IMP.docx
+REPORTE_{PUERTO}_{CONSECUTIVO}-{AÑO}_MV_{BUQUE}___{VIAJE}_{PUERTO}_{TIPO}.docx
 ```
 
-Ejemplo: `REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
+Ejemplos:
+- IMP: `REPORTE_VER_001-2026_MV_STELLAR_INDIGO___V01_VER_IMP.docx`
+- EXP: `REPORTE_MZT_007-2025_MV_DRACO_FAITH___V2510_MZT_EXP.docx`
 
 ---
 
@@ -409,7 +457,7 @@ Ejemplo: `REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
 - **Empresa**: Naviera SMP, S.A. de C.V.
 - **Web**: https://navierasmp.com.mx/
 - **Usuario final**: Operador portuario (nivel técnico bajo, usa desktop Windows)
-- **Versión**: 1.2.0
+- **Versión**: 1.2.4
 - **Documento de referencia**: `referencia/REPORTE_VER_001-2026_MV_STELLAR_INDIGO__V01_VER_IMP.docx`
 
 ---
