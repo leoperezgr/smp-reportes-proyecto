@@ -220,11 +220,18 @@ export { eliminarFotosReporte }
 
 // ─── Cálculo de progreso ───
 
-export function calcularProgreso({ config, operacion, stowage, numFotos, numFotosPortada, generado }) {
+export function calcularProgreso({ config, operacion, stowage, exportacion, numFotos, numFotosPortada, generado }) {
+  const esExp = config?.tipoOperacion === 'EXP'
   let p = 0
   if (config?.buque?.trim()) p += 15
   if (operacion?.eventos?.some((e) => e.mes) && operacion?.cargaTotal?.trim()) p += 20
-  if (stowage?.bodegas?.some((b) => parseFloat(b.tonelaje) > 0)) p += 20
+  if (esExp) {
+    // EXP: BLs con al menos 1 cantidad
+    if (operacion?.bls?.some((bl) => (bl.cantidades || []).some((c) => c.descripcion?.trim()))) p += 20
+  } else {
+    // IMP: Stowage con tonelaje
+    if (stowage?.bodegas?.some((b) => parseFloat(b.tonelaje) > 0)) p += 20
+  }
   if (numFotosPortada >= 2 && numFotos > 0) p += 35
   if (generado) p += 10
   return p
