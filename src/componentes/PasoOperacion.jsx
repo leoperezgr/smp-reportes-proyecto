@@ -1,12 +1,58 @@
-import { Clock, List, FileText, Trash2, Plus, Package } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Clock, List, FileText, Trash2, Plus, Package, Upload, AlertTriangle, X } from 'lucide-react'
 import { MESES, blExpInicial } from '../constantes'
-import { actualizarProfundo, formatearHora, formatearTonelaje, parsearTonelaje } from '../utilidades'
+import { actualizarProfundo, formatearHora, formatearTonelaje, leerComoArrayBuffer, parsearTonelaje } from '../utilidades'
+import { parsearPackingList } from '../importador/parsearPackingList'
 
 import { Tarjeta, Entrada, Boton } from './ui'
 
 export default function PasoOperacion({ operacion, setOperacion, config }) {
   const act = (ruta, val) => setOperacion((p) => actualizarProfundo(p, ruta, val))
   const esExp = config.tipoOperacion === 'EXP'
+
+  const refInputXlsx = useRef(null)
+  const [errorImport, setErrorImport] = useState('')
+  const [preview, setPreview] = useState(null) // { bls, advertencias, nombreArchivo }
+  const [cargando, setCargando] = useState(false)
+
+  const totalBlsActuales = operacion.bls.length
+  const totalProductosActuales = operacion.bls.reduce((s, bl) => s + (bl.cantidades?.length || 0), 0)
+
+  const manejarArchivo = async (archivo) => {
+    if (!archivo) return
+    setErrorImport('')
+    setCargando(true)
+    try {
+      const buffer = await leerComoArrayBuffer(archivo)
+      const resultado = await parsearPackingList(buffer)
+      setPreview({ ...resultado, nombreArchivo: archivo.name })
+    } catch (e) {
+      setErrorImport(e.message || 'No se pudo leer el archivo.')
+    } finally {
+      setCargando(false)
+      if (refInputXlsx.current) refInputXlsx.current.value = ''
+    }
+  }
+
+  const confirmarImportacion = () => {
+    if (!preview) return
+    const nuevosBls = preview.bls
+      .filter((bl) => (bl.cantidades || []).length > 0)
+      .map((bl, i) => ({
+        numero: `BL-${String(i + 1).padStart(3, '0')}`,
+        puerto: bl.puerto || '',
+        pais: bl.pais || '',
+        ciudad: bl.ciudad || '',
+        cantidades: bl.cantidades.map((c) => ({
+          descripcion: c.descripcion || '',
+          tipo: c.tipo || 'BUNDLES',
+          piezas: c.piezas || '0',
+          tonelaje: c.tonelaje || '0.000',
+        })),
+      }))
+    setOperacion((p) => ({ ...p, bls: nuevosBls }))
+    setPreview(null)
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -88,6 +134,35 @@ export default function PasoOperacion({ operacion, setOperacion, config }) {
 
       {esExp ? (
         <>
+          <Tarjeta titulo="Importar Packing List" subtitulo="Sube un archivo .xlsx con la Hoja1 tabulada para llenar los BLs automáticamente" icono={<Upload size={22} />}>
+            <div className="flex items-center gap-3">
+              <input
+                ref={refInputXlsx}
+                type="file"
+                accept=".xlsx,.xls"
+                hidden
+                onChange={(e) => manejarArchivo(e.target.files?.[0])}
+              />
+              <Boton
+                variante="secundario"
+                icono={<Upload size={16} />}
+                onClick={() => refInputXlsx.current?.click()}
+                deshabilitado={cargando}
+              >
+                {cargando ? 'Leyendo archivo…' : 'Seleccionar archivo .xlsx'}
+              </Boton>
+              <span className="text-xs text-gray-500 font-source">
+                Se reemplazarán los {totalBlsActuales} BLs actuales tras confirmar.
+              </span>
+            </div>
+            {errorImport && (
+              <div className="mt-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-source flex items-start gap-2">
+                <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+                <span>{errorImport}</span>
+              </div>
+            )}
+          </Tarjeta>
+
           {operacion.bls.map((bl, i) => {
             const totalPiezas = (bl.cantidades || []).reduce((s, c) => s + (parseInt(c.piezas) || 0), 0)
             const totalTonelaje = (bl.cantidades || []).reduce((s, c) => s + parsearTonelaje(c.tonelaje), 0)
@@ -182,6 +257,97 @@ export default function PasoOperacion({ operacion, setOperacion, config }) {
           <Boton variante="secundario" icono={<Plus size={16} />} onClick={() => setOperacion((p) => ({ ...p, bls: [...p.bls, { numero: `BL-${String(p.bls.length + 1).padStart(3, '0')}`, puerto: '', piezas: '1', tonelaje: '' }] }))}>Agregar BL</Boton>
         </Tarjeta>
       )}
+
+      {preview && (
+        <ModalConfirmarImport
+          preview={preview}
+          totalBlsActuales={totalBlsActuales}
+          totalProductosActuales={totalProductosActuales}
+          onCancelar={() => setPreview(null)}
+          onConfirmar={confirmarImportacion}
+        />
+      )}
+    </div>
+  )
+}
+
+function ModalConfirmarImport({ preview, totalBlsActuales, totalProductosActuales, onCancelar, onConfirmar }) {
+  const totalProductosImportados = preview.bls.reduce((s, bl) => s + (bl.cantidades?.length || 0), 0)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-7 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="text-accent"><Upload size={22} /></div>
+            <div>
+              <h3 className="m-0 text-base font-semibold text-navy font-lexend">Importar Packing List</h3>
+              <p className="mt-0.5 text-[13px] text-gray-400 mb-0">{preview.nombreArchivo}</p>
+            </div>
+          </div>
+          <button onClick={onCancelar} className="text-gray-400 hover:text-navy transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="px-7 py-6">
+          <p className="text-sm font-source text-navy mb-4">
+            Se detectaron <strong>{preview.bls.length} BLs</strong> con <strong>{totalProductosImportados} productos</strong> totales.
+          </p>
+
+          <div className="overflow-x-auto mb-5">
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                <tr className="bg-navy text-white">
+                  <th className="px-3 py-2 font-lexend font-semibold text-left">BL</th>
+                  <th className="px-3 py-2 font-lexend font-semibold text-left">Puerto / País</th>
+                  <th className="px-3 py-2 font-lexend font-semibold text-left">Ciudad</th>
+                  <th className="px-3 py-2 font-lexend font-semibold text-center">Piezas</th>
+                  <th className="px-3 py-2 font-lexend font-semibold text-center">Tonelaje</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.bls.map((bl, i) => {
+                  const piezas = (bl.cantidades || []).reduce((s, c) => s + (parseInt(c.piezas) || 0), 0)
+                  const tonelaje = (bl.cantidades || []).reduce((s, c) => s + parsearTonelaje(c.tonelaje), 0)
+                  return (
+                    <tr key={i} className="border-b border-gray-100">
+                      <td className="px-3 py-2 font-semibold text-navy font-lexend text-xs">BL-{String(i + 1).padStart(3, '0')}</td>
+                      <td className="px-3 py-2 text-xs font-source">{bl.puerto || '—'}{bl.pais ? `, ${bl.pais}` : ''}</td>
+                      <td className="px-3 py-2 text-xs font-source">{bl.ciudad || '—'}</td>
+                      <td className="px-3 py-2 text-center text-xs font-semibold">{piezas.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-center text-xs font-semibold">{formatearTonelaje(tonelaje)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {preview.advertencias && preview.advertencias.length > 0 && (
+            <div className="mb-5 px-4 py-3 rounded-lg bg-yellow-50 border border-yellow-200">
+              <div className="flex items-start gap-2 mb-2">
+                <AlertTriangle size={18} className="text-yellow-600 shrink-0 mt-0.5" />
+                <span className="text-sm font-semibold font-lexend text-yellow-800">Advertencias ({preview.advertencias.length})</span>
+              </div>
+              <ul className="text-xs font-source text-yellow-800 list-disc pl-8 space-y-1">
+                {preview.advertencias.map((a, i) => (
+                  <li key={i}>{a}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-sm font-source text-red-700 mb-5">
+            ⚠️ Esta acción reemplazará los BLs actuales ({totalBlsActuales} BLs con {totalProductosActuales} productos). Esta operación no se puede deshacer desde aquí.
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <Boton variante="fantasma" onClick={onCancelar}>Cancelar</Boton>
+            <Boton variante="primario" onClick={onConfirmar}>Reemplazar BLs</Boton>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
