@@ -1,6 +1,6 @@
 {
   "name": "smp-reportes",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "private": true,
   "description": "Generador de Reportes de Operación — Naviera SMP",
   "type": "module",

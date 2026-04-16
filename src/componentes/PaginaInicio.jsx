@@ -24,7 +24,7 @@ export default function PaginaInicio({ reportes, onNuevo, onAbrir, onEliminar, o
         </div>
         <div className="flex items-center gap-3 text-xs font-lexend">
           <span className="text-white/30">Naviera SMP, S.A. de C.V.</span>
-          <span className="text-white/20">v1.3.3</span>
+          <span className="text-white/20">v1.3.4</span>
         </div>
       </div>
 
