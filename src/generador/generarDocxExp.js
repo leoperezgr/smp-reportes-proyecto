@@ -40,21 +40,32 @@ export default async function generarDocxExp({ config, operacion, stowage, expor
     const subtitulo = bl.puerto && bl.pais ? `   (${bl.puerto} , ${bl.pais})` : ''
     const cantidades = bl.cantidades || []
 
+    // Un BL por página: forzar salto antes de cada BL excepto el primero
+    // + enter en blanco para separar el título del header
+    if (bi > 0) {
+      pag2.push(new Paragraph({ children: [new PageBreak()] }))
+      pag2.push(new Paragraph({ children: [] }))
+    }
+
     pag2.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 240, after: 80 },
+      keepNext: true,
       children: [
         new TextRun({ text: titulo, bold: true, size: 28, font: 'Calibri' }),
         new TextRun({ text: subtitulo, bold: true, size: 32, font: 'Calibri' }),
       ],
     }))
 
+    // Separador inline con cantSplit (evita que Word parta la fila entre páginas)
+    const sepBL = (color) => new TableRow({ cantSplit: true, children: colsBLExp.map((ancho) => celda('', { ancho, fondo: color })) })
+
     const filasC = [
-      new TableRow({ children: [celda('DESCRIPCION DEL PRODUCTO', { ancho: colsBLExp[0], negrita: false, alineacion: AlignmentType.CENTER, ...cbExp }), celda('TIPO', { ancho: colsBLExp[1], negrita: false, alineacion: AlignmentType.CENTER, ...cbExp }), celda('PIEZA', { ancho: colsBLExp[2], negrita: false, alineacion: AlignmentType.CENTER, ...cbExp }), celda('TONELAJE (MT)', { ancho: colsBLExp[3], negrita: false, alineacion: AlignmentType.CENTER, ...cbExp })] }),
-      filaSeparadora(colsBLExp, 'FFFF00'),
-      ...cantidades.map((c) => new TableRow({ children: [celda(c.descripcion, { ancho: colsBLExp[0], negrita: true, ...cbExp }), celda(c.tipo, { ancho: colsBLExp[1], alineacion: AlignmentType.CENTER, ...cbExp }), celda((parseInt(c.piezas) || 0).toLocaleString('en-US'), { ancho: colsBLExp[2], alineacion: AlignmentType.CENTER, negrita: true, ...cbExp }), celda(c.tonelaje, { ancho: colsBLExp[3], alineacion: AlignmentType.CENTER, negrita: true, ...cbExp })] })),
-      filaSeparadora(colsBLExp, 'FFC000'),
-      new TableRow({ children: [celda('TOTAL', { ancho: colsBLExp[0], negrita: true, alineacion: AlignmentType.CENTER, ...cbExp }), celda('', { ancho: colsBLExp[1], alineacion: AlignmentType.CENTER, ...cbExp }), celda(cantidades.reduce((s, c) => s + (parseInt(c.piezas) || 0), 0).toLocaleString('en-US'), { ancho: colsBLExp[2], alineacion: AlignmentType.CENTER, negrita: true, ...cbExp }), celda(formatearTonelaje(cantidades.reduce((s, c) => s + parsearTonelaje(c.tonelaje), 0)), { ancho: colsBLExp[3], alineacion: AlignmentType.CENTER, negrita: true, ...cbExp })] }),
+      new TableRow({ cantSplit: true, children: [celda('DESCRIPCION DEL PRODUCTO', { ancho: colsBLExp[0], negrita: false, alineacion: AlignmentType.CENTER, ...cbExp }), celda('TIPO', { ancho: colsBLExp[1], negrita: false, alineacion: AlignmentType.CENTER, ...cbExp }), celda('PIEZA', { ancho: colsBLExp[2], negrita: false, alineacion: AlignmentType.CENTER, ...cbExp }), celda('TONELAJE (MT)', { ancho: colsBLExp[3], negrita: false, alineacion: AlignmentType.CENTER, ...cbExp })] }),
+      sepBL('FFFF00'),
+      ...cantidades.map((c) => new TableRow({ cantSplit: true, children: [celda(c.descripcion, { ancho: colsBLExp[0], negrita: true, ...cbExp }), celda(c.tipo, { ancho: colsBLExp[1], alineacion: AlignmentType.CENTER, ...cbExp }), celda((parseInt(c.piezas) || 0).toLocaleString('en-US'), { ancho: colsBLExp[2], alineacion: AlignmentType.CENTER, negrita: true, ...cbExp }), celda(c.tonelaje, { ancho: colsBLExp[3], alineacion: AlignmentType.CENTER, negrita: true, ...cbExp })] })),
+      sepBL('FFC000'),
+      new TableRow({ cantSplit: true, children: [celda('TOTAL', { ancho: colsBLExp[0], negrita: true, alineacion: AlignmentType.CENTER, ...cbExp }), celda('', { ancho: colsBLExp[1], alineacion: AlignmentType.CENTER, ...cbExp }), celda(cantidades.reduce((s, c) => s + (parseInt(c.piezas) || 0), 0).toLocaleString('en-US'), { ancho: colsBLExp[2], alineacion: AlignmentType.CENTER, negrita: true, ...cbExp }), celda(formatearTonelaje(cantidades.reduce((s, c) => s + parsearTonelaje(c.tonelaje), 0)), { ancho: colsBLExp[3], alineacion: AlignmentType.CENTER, negrita: true, ...cbExp })] }),
     ]
     const indentBL = -Math.round((totalBLExp - 8838) / 2)
     pag2.push(new Table({ layout: TableLayoutType.FIXED, indent: { size: indentBL, type: WidthType.DXA }, width: { size: totalBLExp, type: WidthType.DXA }, columnWidths: colsBLExp, rows: filasC }))
