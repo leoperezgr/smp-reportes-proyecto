@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron')
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs = require('fs')
@@ -37,6 +37,32 @@ function createWindow() {
   }
 
   win.setMenuBarVisibility(false)
+
+  // Menú contextual con clic derecho (Cortar / Copiar / Pegar / Seleccionar todo)
+  win.webContents.on('context-menu', (_ev, params) => {
+    const { isEditable, editFlags, selectionText } = params
+    const tieneSeleccion = selectionText && selectionText.trim().length > 0
+    const plantilla = []
+
+    if (isEditable) {
+      plantilla.push(
+        { label: 'Cortar', role: 'cut', enabled: editFlags.canCut && tieneSeleccion },
+        { label: 'Copiar', role: 'copy', enabled: editFlags.canCopy && tieneSeleccion },
+        { label: 'Pegar', role: 'paste', enabled: editFlags.canPaste },
+        { type: 'separator' },
+        { label: 'Seleccionar todo', role: 'selectAll', enabled: editFlags.canSelectAll }
+      )
+    } else if (tieneSeleccion) {
+      plantilla.push(
+        { label: 'Copiar', role: 'copy', enabled: editFlags.canCopy }
+      )
+    }
+
+    if (plantilla.length > 0) {
+      Menu.buildFromTemplate(plantilla).popup({ window: win })
+    }
+  })
+
   return win
 }
 
