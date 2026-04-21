@@ -104,7 +104,7 @@ export default function PasoStowage({ stowage, setStowage, config, exportacion, 
 
       <Tarjeta titulo="Observaciones" subtitulo="Descripción detallada de la operación" icono={<List size={22} />}>
         <textarea value={stowage.observaciones} onChange={(e) => setStowage((p) => ({ ...p, observaciones: e.target.value }))} placeholder="EL BUQUE ARRIBO EL DIA 13 DE ENERO DE 2026 A LAS 06:25 HRS..."
-          className="w-full px-3.5 py-2.5 border-[1.5px] border-gray-200 rounded-lg text-sm font-source text-navy bg-white resize-y min-h-[200px] placeholder:text-gray-300" />
+          className="w-full px-3.5 py-2.5 border-[1.5px] border-gray-200 rounded-lg text-sm font-source text-navy bg-white resize-y min-h-[200px] text-justify placeholder:text-gray-300" />
       </Tarjeta>
 
       {esExp && exportacion && (
