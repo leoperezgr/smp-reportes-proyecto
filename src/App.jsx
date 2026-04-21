@@ -324,7 +324,7 @@ export default function App() {
       </div>
 
       {/* Navegación */}
-      <div className="bg-white border-b border-gray-100 px-8 flex gap-0 overflow-x-auto">
+      <div className="bg-white border-b border-gray-100 px-8 flex gap-0">
         {PASOS.map((p, i) => {
           const activo = paso === i
           const yaVisitado = i < maxPasoVisitado
