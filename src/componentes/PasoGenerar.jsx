@@ -19,10 +19,13 @@ export default function PasoGenerar({ config, operacion, stowage, exportacion, f
       : ['seccion-DESCARGA DE BUQUE', 'seccion-AREA DE ALMACENAMIENTO', 'seccion-CARGA DE EQUIPO FFCC', 'seccion-DOCUMENTOS']
 
     if (esExp) {
-      // En EXP, seccion-BODEGAS + bodegas numeradas van en una sola sección
-      let totalBodega = (fpc['seccion-BODEGAS'] || []).length
-      for (const cat of bodegas) totalBodega += (fpc[cat] || []).length
-      if (totalBodega > 0) p += Math.ceil(totalBodega / 2)
+      // En EXP, cada bodega (seccion-BODEGAS + bodegas numeradas) es su propia sección con título
+      const bodegaCats = ['seccion-BODEGAS', ...bodegas]
+      for (const cat of bodegaCats) {
+        const g = fpc[cat] || []
+        if (g.length === 0) continue
+        p += Math.ceil(g.length / 2)
+      }
       for (const cat of secciones) {
         const g = fpc[cat] || []
         if (g.length === 0) continue
@@ -123,19 +126,20 @@ export default function PasoGenerar({ config, operacion, stowage, exportacion, f
           }
 
           if (esExp) {
-            // Agrupar seccion-BODEGAS + todas las bodegas numeradas en una
-            const fotosTodasBodegas = []
-            if (fotosPorCat['seccion-BODEGAS']) fotosTodasBodegas.push(...fotosPorCat['seccion-BODEGAS'])
-            for (const cat of bodegasDelStowage) {
-              if (fotosPorCat[cat]) fotosTodasBodegas.push(...fotosPorCat[cat])
-            }
-            const catsPreview = fotosTodasBodegas.length > 0
-              ? [{ cat: 'bodegas-exp', fotos: fotosTodasBodegas }, ...seccionesOrdenadas.map((c) => ({ cat: c, fotos: fotosPorCat[c] || [] }))]
-              : seccionesOrdenadas.map((c) => ({ cat: c, fotos: fotosPorCat[c] || [] }))
+            // En EXP cada bodega (seccion-BODEGAS + bodegas numeradas) es su propia sección con título
+            const catsPreview = [
+              { cat: 'seccion-BODEGAS', fotos: fotosPorCat['seccion-BODEGAS'] || [] },
+              ...bodegasDelStowage.map((c) => ({ cat: c, fotos: fotosPorCat[c] || [] })),
+              ...seccionesOrdenadas.map((c) => ({ cat: c, fotos: fotosPorCat[c] || [] })),
+            ]
 
             for (const { cat, fotos: fotosGrupo } of catsPreview) {
               if (fotosGrupo.length === 0) continue
-              const titulo = cat === 'bodegas-exp' ? 'CARGA EN BODEGAS DE BUQUE' : cat.replace('seccion-', '')
+              const titulo = cat === 'seccion-BODEGAS'
+                ? 'CARGA EN BODEGAS DE BUQUE'
+                : cat.startsWith('bodega-')
+                  ? `BODEGA No ${cat.replace('bodega-', '').padStart(2, '0')}`
+                  : cat.replace('seccion-', '')
               const esDoc = cat === 'seccion-DOCUMENTOS'
               let i = 0, primera = true
               while (i < fotosGrupo.length) {

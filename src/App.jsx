@@ -59,6 +59,7 @@ export default function App() {
         ...r,
         buque: config.buque, puerto: config.puerto, consecutivo: config.consecutivo,
         anio: config.anio, viaje: config.viaje,
+        tipoOperacion: config.tipoOperacion || 'IMP',
         codigo: `${config.puerto}-${config.consecutivo}-${config.anio}`,
         ultimaEdicion: new Date().toISOString(), pasoActual: paso,
         numFotos: fotos.length, numFotosPortada: fotosPortada.length,
@@ -98,6 +99,7 @@ export default function App() {
     const entrada = {
       id, buque: '', puerto: nuevoConfig.puerto, consecutivo: nuevoConfig.consecutivo,
       anio: nuevoConfig.anio, viaje: nuevoConfig.viaje,
+      tipoOperacion: nuevoConfig.tipoOperacion || 'IMP',
       codigo: `${nuevoConfig.puerto}-${nuevoConfig.consecutivo}-${nuevoConfig.anio}`,
       ultimaEdicion: new Date().toISOString(), pasoActual: 0,
       progreso: 0, numFotos: 0, numFotosPortada: 0,

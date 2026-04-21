@@ -1,5 +1,6 @@
 import {
   Ship, Plus, ChevronRight, Download, Trash2, Loader2, BarChart3, CheckCircle2,
+  ArrowDownToLine, ArrowUpFromLine,
 } from 'lucide-react'
 import { formatearFechaRelativa } from '../utilidades'
 import { Boton } from './ui'
@@ -24,7 +25,7 @@ export default function PaginaInicio({ reportes, onNuevo, onAbrir, onEliminar, o
         </div>
         <div className="flex items-center gap-3 text-xs font-lexend">
           <span className="text-white/30">Naviera SMP, S.A. de C.V.</span>
-          <span className="text-white/20">v1.3.8</span>
+          <span className="text-white/20">v1.3.16</span>
         </div>
       </div>
 
@@ -65,19 +66,28 @@ export default function PaginaInicio({ reportes, onNuevo, onAbrir, onEliminar, o
         {/* Grid de tarjetas */}
         {total > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {reportes.map((r) => (
-              <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+            {reportes.map((r) => {
+              const esExp = r.tipoOperacion === 'EXP'
+              return (
+              <div key={r.id} className={`bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow border-l-4 ${esExp ? 'border-l-accent' : 'border-l-sky-500'}`}>
                 <div className="p-5">
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-start justify-between mb-3 gap-2">
                     <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold font-lexend tracking-wide ${esExp ? 'bg-accent/10 text-accent' : 'bg-sky-100 text-sky-700'}`}>
+                          {esExp ? <ArrowUpFromLine size={10} strokeWidth={2.5} /> : <ArrowDownToLine size={10} strokeWidth={2.5} />}
+                          {esExp ? 'EXP' : 'IMP'}
+                        </span>
+                        <span className="text-[10px] text-gray-300 font-lexend">·</span>
+                        <p className="m-0 text-[11px] text-gray-400 font-lexend truncate">
+                          {r.puerto}-{r.consecutivo}-{r.anio}  {r.viaje}
+                        </p>
+                      </div>
                       <h3 className="m-0 text-base font-bold text-navy font-lexend truncate">
                         {r.buque || 'Sin nombre'}
                       </h3>
-                      <p className="m-0 text-xs text-gray-400 font-lexend mt-0.5">
-                        {r.puerto}-{r.consecutivo}-{r.anio}  {r.viaje}
-                      </p>
                     </div>
-                    <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold font-lexend ${r.progreso >= 100 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-accent'}`}>
+                    <div className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold font-lexend ${r.progreso >= 100 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-accent'}`}>
                       {r.progreso >= 100 ? 'Completo' : `${r.progreso}%`}
                     </div>
                   </div>
@@ -112,7 +122,8 @@ export default function PaginaInicio({ reportes, onNuevo, onAbrir, onEliminar, o
                   </div>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

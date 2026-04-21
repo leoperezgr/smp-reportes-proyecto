@@ -69,18 +69,32 @@ export function crearSeccion() {
   }
 }
 
-// Portada: 2 fotos del buque
+// Portada: 2 fotos del buque — acota altura para garantizar que ambas quepan en la hoja 1 preservando aspect ratio
 export async function construirPortada(docx, fotosPortada) {
   const { Paragraph, ImageRun, PageBreak, AlignmentType } = docx
   const portada = []
+  const anchoMaxPx = 680
+  // Buffer calibrado empíricamente: el header DEACERO (barra naranja + logo)
+  // ocupa espacio visible sobre el margen superior nominal. 1330 DXA da ~386 px
+  // por foto sin desbordar a la página 2
+  const altoDisponibleDXA = DOC.altoHoja - DOC.margenTop - DOC.margenBottom - 1330
+  const altoDisponiblePx = Math.floor(altoDisponibleDXA / 1440 * 96)
+  const espacioEntreFotosPx = 6
+  const altoMaxPorFoto = Math.floor((altoDisponiblePx - espacioEntreFotosPx) / 2)
+
   for (let i = 0; i < fotosPortada.length; i++) {
     const fp = fotosPortada[i]
     const dims = await obtenerDimensiones(fp.archivo)
-    const anchoPt = 590
-    const naturalHeight = Math.round((dims.alto / dims.ancho) * anchoPt)
-    const altoPt = Math.max(naturalHeight, 380)
+    const ratio = dims.ancho / dims.alto
+    let anchoPx = anchoMaxPx
+    let altoPx = Math.round(anchoMaxPx / ratio)
+    if (altoPx > altoMaxPorFoto) {
+      altoPx = altoMaxPorFoto
+      anchoPx = Math.round(altoMaxPorFoto * ratio)
+    }
+    const esUltima = i === fotosPortada.length - 1
     portada.push(
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: i === 0 ? 0 : 120, after: 0 }, children: [new ImageRun({ type: 'jpg', data: await leerImagen(fp.archivo), transformation: { width: anchoPt, height: altoPt }, altText: { title: 'Portada', description: 'Buque', name: 'portada' } })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: esUltima ? 0 : espacioEntreFotosPx * 15 }, children: [new ImageRun({ type: 'jpg', data: await leerImagen(fp.archivo), transformation: { width: anchoPx, height: altoPx }, altText: { title: 'Portada', description: 'Buque', name: 'portada' } })] }),
     )
   }
   portada.push(new Paragraph({ children: [new PageBreak()] }))
@@ -160,8 +174,9 @@ export async function construirFotos(docx, { fotos, stowage, esExp }) {
   const pagsFotos = []
   const esDocumentos = (cat) => cat === 'seccion-DOCUMENTOS'
   const tituloCategoria = (cat) => {
+    if (cat === 'seccion-BODEGAS') return 'CARGA EN BODEGAS DE BUQUE'
     if (cat.startsWith('bodega-')) {
-      return esExp ? 'CARGA EN BODEGAS DE BUQUE' : `BODEGA No ${cat.replace('bodega-', '').padStart(2, '0')}`
+      return `BODEGA No ${cat.replace('bodega-', '').padStart(2, '0')}`
     }
     return cat.replace('seccion-', '')
   }
@@ -188,17 +203,7 @@ export async function construirFotos(docx, { fotos, stowage, esExp }) {
 
   let catsParaFotos = todasCats
   if (esExp) {
-    const fotosTodasBodegas = []
-    if (fotosPorCat['seccion-BODEGAS']) fotosTodasBodegas.push(...fotosPorCat['seccion-BODEGAS'])
-    for (const cat of bodegasDelStowage) {
-      if (fotosPorCat[cat]) fotosTodasBodegas.push(...fotosPorCat[cat])
-    }
-    if (fotosTodasBodegas.length > 0) {
-      fotosPorCat['bodegas-exp'] = fotosTodasBodegas
-      catsParaFotos = ['bodegas-exp', ...seccionesOrdenadas]
-    } else {
-      catsParaFotos = [...seccionesOrdenadas]
-    }
+    catsParaFotos = ['seccion-BODEGAS', ...bodegasDelStowage, ...seccionesOrdenadas]
   }
 
   for (const cat of catsParaFotos) {
@@ -235,7 +240,7 @@ export async function construirFotos(docx, { fotos, stowage, esExp }) {
 
       if (!catTituloPuesto) {
         catTituloPuesto = true
-        const titulo = cat === 'bodegas-exp' ? 'CARGA EN BODEGAS DE BUQUE' : tituloCategoria(cat)
+        const titulo = tituloCategoria(cat)
         pagina.push(new Paragraph({
           alignment: AlignmentType.CENTER, spacing: { before: 100, after: 100 },
           children: [new TextRun({ text: titulo, bold: true, size: 28, font: 'Arial' })],
