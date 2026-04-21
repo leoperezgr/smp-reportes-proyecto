@@ -8,6 +8,43 @@ export const leerComoArrayBuffer = (archivo) =>
 
 export const leerImagen = async (archivo) => new Uint8Array(await leerComoArrayBuffer(archivo))
 
+// Recomprime y redimensiona una imagen antes de embeberla en el .docx.
+// No escala hacia arriba; si la foto ya es menor que anchoMax sólo la recomprime a JPEG.
+// Preserva aspect ratio. Se usa en el momento de generación para mantener el original en IndexedDB intacto.
+export const leerImagenComprimida = (archivo, { anchoMax = 1800, calidad = 0.85 } = {}) =>
+  new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(archivo)
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const ratio = img.naturalWidth / img.naturalHeight
+        const nuevoAncho = Math.min(img.naturalWidth, anchoMax)
+        const nuevoAlto = Math.round(nuevoAncho / ratio)
+        const canvas = document.createElement('canvas')
+        canvas.width = nuevoAncho
+        canvas.height = nuevoAlto
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(0, 0, nuevoAncho, nuevoAlto)
+        ctx.drawImage(img, 0, 0, nuevoAncho, nuevoAlto)
+        canvas.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(url)
+            if (!blob) return reject(new Error('canvas.toBlob devolvió null'))
+            blob.arrayBuffer().then((ab) => resolve(new Uint8Array(ab))).catch(reject)
+          },
+          'image/jpeg',
+          calidad
+        )
+      } catch (e) {
+        URL.revokeObjectURL(url)
+        reject(e)
+      }
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo cargar la imagen')) }
+    img.src = url
+  })
+
 export const formatearHora = (v) => {
   const s = String(v).replace(/[^0-9]/g, '')
   if (s.length === 0) return ''
