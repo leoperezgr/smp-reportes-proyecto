@@ -4,6 +4,7 @@ import { formatearTonelaje, parsearTonelaje } from '../utilidades'
 import {
   cargarDocx, crearBordes, crearCelda, crearFilaSeparadora, crearSeccion,
   construirPortada, construirTablaEventos, construirObservaciones, construirFotos, postProcesarTemplate,
+  calcularObjetivoKBPorFoto,
 } from './comun'
 
 export default async function generarDocxImp({ config, operacion, stowage, fotos, fotosPortada, devolverBlob = false }) {
@@ -18,7 +19,8 @@ export default async function generarDocxImp({ config, operacion, stowage, fotos
   const cb = { fuente: 'Cambria', tamano: 22 }
 
   // ═══ PORTADA ═══
-  const portada = await construirPortada(docx, fotosPortada)
+  const objetivoKB = calcularObjetivoKBPorFoto((fotosPortada?.length || 0) + (fotos?.length || 0))
+  const portada = await construirPortada(docx, fotosPortada, objetivoKB)
 
   // ═══ PÁGINA 2: EVENTOS + CANTIDADES + GRAN TOTAL ═══
   const tablaEventos = construirTablaEventos(docx, operacion, bordesObj)
@@ -89,7 +91,7 @@ export default async function generarDocxImp({ config, operacion, stowage, fotos
   ]
 
   // ═══ FOTOS ═══
-  const pagsFotos = await construirFotos(docx, { fotos, stowage, esExp: false })
+  const pagsFotos = await construirFotos(docx, { fotos, stowage, esExp: false, objetivoKB })
 
   // ═══ GENERAR DOCUMENTO ═══
   const dummyP = new Paragraph({ children: [] })

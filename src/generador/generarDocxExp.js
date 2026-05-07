@@ -4,6 +4,7 @@ import { formatearTonelaje, parsearTonelaje } from '../utilidades'
 import {
   cargarDocx, crearBordes, crearCelda, crearFilaSeparadora, crearSeccion,
   construirPortada, construirTablaEventos, construirObservaciones, construirFotos, postProcesarTemplate,
+  calcularObjetivoKBPorFoto,
 } from './comun'
 
 export default async function generarDocxExp({ config, operacion, stowage, exportacion, fotos, fotosPortada, devolverBlob = false }) {
@@ -18,7 +19,8 @@ export default async function generarDocxExp({ config, operacion, stowage, expor
   const cb = { fuente: 'Cambria', tamano: 22 }
 
   // ═══ PORTADA ═══
-  const portada = await construirPortada(docx, fotosPortada)
+  const objetivoKB = calcularObjetivoKBPorFoto((fotosPortada?.length || 0) + (fotos?.length || 0))
+  const portada = await construirPortada(docx, fotosPortada, objetivoKB)
 
   // ═══ PÁGINA 2: EVENTOS + TABLAS BL ═══
   const tablaEventos = construirTablaEventos(docx, operacion, bordesObj)
@@ -179,7 +181,7 @@ export default async function generarDocxExp({ config, operacion, stowage, expor
   }
 
   // ═══ FOTOS ═══
-  const pagsFotos = await construirFotos(docx, { fotos, stowage, esExp: true })
+  const pagsFotos = await construirFotos(docx, { fotos, stowage, esExp: true, objetivoKB })
 
   // ═══ GENERAR DOCUMENTO ═══
   const dummyP = new Paragraph({ children: [] })

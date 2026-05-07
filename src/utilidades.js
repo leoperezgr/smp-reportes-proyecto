@@ -9,41 +9,76 @@ export const leerComoArrayBuffer = (archivo) =>
 export const leerImagen = async (archivo) => new Uint8Array(await leerComoArrayBuffer(archivo))
 
 // Recomprime y redimensiona una imagen antes de embeberla en el .docx.
-// No escala hacia arriba; si la foto ya es menor que anchoMax sólo la recomprime a JPEG.
-// Preserva aspect ratio. Se usa en el momento de generación para mantener el original en IndexedDB intacto.
-export const leerImagenComprimida = (archivo, { anchoMax = 1800, calidad = 0.85 } = {}) =>
-  new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(archivo)
-    const img = new Image()
-    img.onload = () => {
-      try {
-        const ratio = img.naturalWidth / img.naturalHeight
-        const nuevoAncho = Math.min(img.naturalWidth, anchoMax)
-        const nuevoAlto = Math.round(nuevoAncho / ratio)
-        const canvas = document.createElement('canvas')
-        canvas.width = nuevoAncho
-        canvas.height = nuevoAlto
-        const ctx = canvas.getContext('2d')
-        ctx.fillStyle = '#FFFFFF'
-        ctx.fillRect(0, 0, nuevoAncho, nuevoAlto)
-        ctx.drawImage(img, 0, 0, nuevoAncho, nuevoAlto)
-        canvas.toBlob(
-          (blob) => {
-            URL.revokeObjectURL(url)
-            if (!blob) return reject(new Error('canvas.toBlob devolvió null'))
-            blob.arrayBuffer().then((ab) => resolve(new Uint8Array(ab))).catch(reject)
-          },
-          'image/jpeg',
-          calidad
-        )
-      } catch (e) {
-        URL.revokeObjectURL(url)
-        reject(e)
+// Si se pasa `objetivoKB`, itera por escalones de calidad y ancho hasta cumplir el presupuesto;
+// si nada cumple, devuelve la versión más pequeña obtenida.
+// Si no se pasa `objetivoKB`, hace una sola pasada con anchoMax/calidad (comportamiento original).
+const ESCALONES_CALIDAD_DEF = [0.85, 0.78, 0.70, 0.62, 0.55, 0.48]
+const ESCALONES_ANCHO_DEF = [1.0, 0.9, 0.8, 0.7]
+
+const _cargarImagen = (archivo) => new Promise((resolve, reject) => {
+  const url = URL.createObjectURL(archivo)
+  const img = new Image()
+  img.onload = () => resolve({ img, url })
+  img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo cargar la imagen')) }
+  img.src = url
+})
+
+const _renderJpeg = (img, ancho, alto, calidad) => new Promise((resolve, reject) => {
+  const canvas = document.createElement('canvas')
+  canvas.width = ancho
+  canvas.height = alto
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#FFFFFF'
+  ctx.fillRect(0, 0, ancho, alto)
+  ctx.drawImage(img, 0, 0, ancho, alto)
+  canvas.toBlob(
+    (blob) => {
+      if (!blob) return reject(new Error('canvas.toBlob devolvió null'))
+      blob.arrayBuffer().then((ab) => resolve(new Uint8Array(ab))).catch(reject)
+    },
+    'image/jpeg',
+    calidad,
+  )
+})
+
+export const leerImagenComprimida = async (
+  archivo,
+  {
+    anchoMax = 1800,
+    calidad = 0.85,
+    objetivoKB,
+    escalonesCalidad = ESCALONES_CALIDAD_DEF,
+    escalonesAncho = ESCALONES_ANCHO_DEF,
+  } = {},
+) => {
+  const { img, url } = await _cargarImagen(archivo)
+  try {
+    const ratio = img.naturalWidth / img.naturalHeight
+
+    if (!objetivoKB) {
+      const nuevoAncho = Math.min(img.naturalWidth, anchoMax)
+      const nuevoAlto = Math.round(nuevoAncho / ratio)
+      return await _renderJpeg(img, nuevoAncho, nuevoAlto, calidad)
+    }
+
+    const objetivoBytes = objetivoKB * 1024
+    let mejor = null
+
+    for (const multAncho of escalonesAncho) {
+      const anchoIntento = Math.min(img.naturalWidth, Math.floor(anchoMax * multAncho))
+      const altoIntento = Math.max(1, Math.round(anchoIntento / ratio))
+      for (const q of escalonesCalidad) {
+        if (q > calidad) continue // no superar el techo de calidad por sección
+        const data = await _renderJpeg(img, anchoIntento, altoIntento, q)
+        if (data.byteLength <= objetivoBytes) return data
+        if (!mejor || data.byteLength < mejor.byteLength) mejor = data
       }
     }
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo cargar la imagen')) }
-    img.src = url
-  })
+    return mejor
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
 
 export const formatearHora = (v) => {
   const s = String(v).replace(/[^0-9]/g, '')

@@ -92,15 +92,27 @@ ipcMain.handle('convertir-docx-a-pdf', async (_event, { docxBuffer, nombreBase }
   try {
     fs.writeFileSync(docxPath, Buffer.from(docxBuffer))
 
-    // Script PowerShell: abre el .docx con Word COM y lo guarda como PDF (wdFormatPDF = 17)
+    // Script PowerShell: abre el .docx con Word COM y exporta a PDF.
+    // Usa ExportAsFixedFormat con OptimizeFor=1 (wdExportOptimizeForOnScreen) para reducir el tamaño
+    // (Word remuestrea imágenes y aplica compresión adicional). Si falla, hace fallback a SaveAs.
+    const docxArg = docxPath.replace(/\\/g, '\\\\')
+    const pdfArg = pdfPath.replace(/\\/g, '\\\\')
     const ps = [
       '$ErrorActionPreference = "Stop"',
       'try {',
       '  $word = New-Object -ComObject Word.Application',
       '  $word.Visible = $false',
       '  $word.DisplayAlerts = 0',
-      `  $doc = $word.Documents.Open("${docxPath.replace(/\\/g, '\\\\')}", $false, $true)`,
-      `  $doc.SaveAs([ref] "${pdfPath.replace(/\\/g, '\\\\')}", [ref] 17)`,
+      `  $doc = $word.Documents.Open("${docxArg}", $false, $true)`,
+      '  try {',
+      // ExportAsFixedFormat: OutputFileName, ExportFormat=17 (PDF), OpenAfterExport=$false,
+      // OptimizeFor=1 (OnScreen, archivos más pequeños), Range=0 (AllDocument), From=1, To=1,
+      // Item=0 (DocumentContent), IncludeDocProps=$false, KeepIRM=$true, CreateBookmarks=0,
+      // DocStructureTags=$false, BitmapMissingFonts=$true, UseISO19005_1=$false
+      `    $doc.ExportAsFixedFormat("${pdfArg}", 17, $false, 1, 0, 1, 1, 0, $false, $true, 0, $false, $true, $false)`,
+      '  } catch {',
+      `    $doc.SaveAs([ref] "${pdfArg}", [ref] 17)`,
+      '  }',
       '  $doc.Close($false)',
       '  $word.Quit()',
       '  [System.Runtime.Interopservices.Marshal]::ReleaseComObject($doc) | Out-Null',

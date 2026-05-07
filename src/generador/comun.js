@@ -1,6 +1,13 @@
 // Utilidades compartidas para generación de .docx (IMP y EXP)
-import { DOC } from '../constantes'
+import { DOC, COMPRESION } from '../constantes'
 import { obtenerDimensiones, leerImagenComprimida } from '../utilidades'
+
+// Calcula presupuesto por foto (KB) para garantizar PDF < 14 MB.
+// Total fotos = portada + bodegas/secciones; reparte el presupuesto global de COMPRESION.
+export function calcularObjetivoKBPorFoto(totalFotos) {
+  const n = Math.max(totalFotos, 1)
+  return Math.floor(COMPRESION.presupuestoTotalKB / n)
+}
 
 // Carga dinámica de la librería docx — retorna todos los constructores necesarios
 export async function cargarDocx() {
@@ -70,7 +77,7 @@ export function crearSeccion() {
 }
 
 // Portada: 2 fotos del buque — acota altura para garantizar que ambas quepan en la hoja 1 preservando aspect ratio
-export async function construirPortada(docx, fotosPortada) {
+export async function construirPortada(docx, fotosPortada, objetivoKB) {
   const { Paragraph, ImageRun, PageBreak, AlignmentType } = docx
   const portada = []
   const anchoMaxPx = 680
@@ -94,7 +101,7 @@ export async function construirPortada(docx, fotosPortada) {
     }
     const esUltima = i === fotosPortada.length - 1
     portada.push(
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: esUltima ? 0 : espacioEntreFotosPx * 15 }, children: [new ImageRun({ type: 'jpg', data: await leerImagenComprimida(fp.archivo, { anchoMax: 2000, calidad: 0.85 }), transformation: { width: anchoPx, height: altoPx }, altText: { title: 'Portada', description: 'Buque', name: 'portada' } })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: esUltima ? 0 : espacioEntreFotosPx * 15 }, children: [new ImageRun({ type: 'jpg', data: await leerImagenComprimida(fp.archivo, { anchoMax: 2000, calidad: 0.85, objetivoKB }), transformation: { width: anchoPx, height: altoPx }, altText: { title: 'Portada', description: 'Buque', name: 'portada' } })] }),
     )
   }
   portada.push(new Paragraph({ children: [new PageBreak()] }))
@@ -169,7 +176,7 @@ export function construirObservaciones(docx, stowage) {
 }
 
 // Páginas de fotos (compartida IMP/EXP)
-export async function construirFotos(docx, { fotos, stowage, esExp }) {
+export async function construirFotos(docx, { fotos, stowage, esExp, objetivoKB }) {
   const { Paragraph, TextRun, ImageRun, PageBreak, AlignmentType } = docx
   const pagsFotos = []
   const esDocumentos = (cat) => cat === 'seccion-DOCUMENTOS'
@@ -254,7 +261,7 @@ export async function construirFotos(docx, { fotos, stowage, esExp }) {
           pagina.push(new Paragraph({ children: [] }))
         }
         pagina.push(
-          new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagenComprimida(fotosGrupo[i].archivo, { anchoMax: 2200, calidad: 0.90 }), transformation: { width: 590, height: maxAltoDoc }, altText: { title: 'Foto', description: 'Documento', name: `foto-doc-${i}` } })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagenComprimida(fotosGrupo[i].archivo, { anchoMax: 2200, calidad: 0.90, objetivoKB }), transformation: { width: 590, height: maxAltoDoc }, altText: { title: 'Foto', description: 'Documento', name: `foto-doc-${i}` } })] }),
         )
         i += 1
       } else {
@@ -268,13 +275,13 @@ export async function construirFotos(docx, { fotos, stowage, esExp }) {
           pagina.push(new Paragraph({ children: [] }))
         }
         pagina.push(
-          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children: [new ImageRun({ type: 'jpg', data: await leerImagenComprimida(f1.archivo, { anchoMax: 1800, calidad: 0.82 }), transformation: { width: anchoBodega, height: altoPorFoto }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i}` } })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children: [new ImageRun({ type: 'jpg', data: await leerImagenComprimida(f1.archivo, { anchoMax: 1800, calidad: 0.85, objetivoKB }), transformation: { width: anchoBodega, height: altoPorFoto }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i}` } })] }),
         )
 
         if (i + 1 < fotosGrupo.length) {
           const f2 = fotosGrupo[i + 1]
           pagina.push(
-            new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagenComprimida(f2.archivo, { anchoMax: 1800, calidad: 0.82 }), transformation: { width: anchoBodega, height: altoPorFoto }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i + 1}` } })] }),
+            new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: await leerImagenComprimida(f2.archivo, { anchoMax: 1800, calidad: 0.85, objetivoKB }), transformation: { width: anchoBodega, height: altoPorFoto }, altText: { title: 'Foto', description: 'Operación', name: `foto-${cat}-${i + 1}` } })] }),
           )
           i += 2
         } else {

@@ -99,6 +99,16 @@ export const stowageInicial = (tipo = 'IMP') => ({
   observaciones: '',
 })
 
+// Compresión adaptativa de fotos para garantizar PDF < 14 MB
+// Presupuesto total para fotos en .docx; el resto (texto/tablas + overhead PDF) cabe en el margen.
+export const COMPRESION = {
+  presupuestoTotalKB: 11500,
+  // Calidades JPEG a probar en cascada (de mayor a menor) hasta cumplir el presupuesto por foto.
+  escalonesCalidad: [0.85, 0.78, 0.70, 0.62, 0.55, 0.48],
+  // Multiplicadores de anchoMax aplicados en cascada si la calidad mínima aún no cumple.
+  escalonesAncho: [1.0, 0.9, 0.8, 0.7],
+}
+
 export const exportacionInicial = () => ({
   partidas: [
     { etiqueta: 'PRIMERA ENTRADA AL PUERTO', fechaArribo: '', fechaCarga: '' },
